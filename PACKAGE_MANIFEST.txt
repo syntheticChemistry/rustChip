@@ -1,0 +1,107 @@
+AKIDA C++ INFERENCE DEPLOYMENT PACKAGE
+======================================
+
+Package Contents:
+-----------------
+
+README.md (696 lines)
+  Complete deployment guide covering:
+  - Prerequisites and verification
+  - 5-step quick start workflow
+  - Detailed code walkthrough
+  - Adaptation guide for production use
+  - Comprehensive troubleshooting
+  - Performance optimization tips
+
+src/main.cpp (77 lines)
+  Entry point for the application
+  - PCIe device discovery via akida::get_drivers()
+  - Error handling for no devices found
+  - Calls run_inference()
+
+src/inference.h (21 lines)
+  Header declaring run_inference() function
+
+src/inference.cpp (324 lines)
+  Core inference pipeline with detailed step-by-step comments:
+  1. Create HardwareDevice from driver
+  2. Program device with neural network model
+  3. Set batch size
+  4. Prepare input tensor (Dense format)
+  5. Convert to Sparse if model requires it
+  6. Enqueue input for inference
+  7. Fetch inference results
+  8. Dequantize output if activation enabled
+  9. Extract and display results
+  Includes optional predict() API usage and latency measurement
+
+src/system_linux.cpp (64 lines)
+  Linux implementation of required system.h hooks:
+  - msleep() using POSIX usleep()
+  - time_ms() using clock_gettime(CLOCK_MONOTONIC)
+  - kick_watchdog() as no-op (not needed on host)
+  - panic() using vfprintf() and abort()
+
+src/CMakeLists.txt (74 lines)
+  Build configuration:
+  - C++17 standard
+  - CMake module path setup
+  - Includes akida-model module
+  - Links against akida library
+  - Configures include paths
+
+scripts/convert_model.py (233 lines)
+  Model conversion utility:
+  - Loads .fbz model file
+  - Discovers Akida device
+  - Maps model to hardware
+  - Generates program.h/program.cpp
+  - Comprehensive error handling
+
+scripts/generate_test_input.py (257 lines)
+  Test input generator:
+  - Loads numpy .npy files
+  - Generates test_input.h/test_input.cpp
+  - Optionally runs Python inference for validation
+  - Saves expected_output.npy for comparison
+
+Total: 8 files, 1,746 lines of code and documentation
+
+Package Structure:
+------------------
+customer_deployment_package/
+├── README.md
+├── scripts/
+│   ├── convert_model.py (executable)
+│   └── generate_test_input.py (executable)
+└── src/
+    ├── main.cpp
+    ├── inference.h
+    ├── inference.cpp
+    ├── system_linux.cpp
+    └── CMakeLists.txt
+
+Deployment Instructions:
+------------------------
+1. Place this package at: engine/test/customer_deployment_package/
+2. Convert model: python scripts/convert_model.py --model-path model.fbz
+3. Build: mkdir build && cmake src/ -B build && make -C build
+4. Run: ./build/akida_inference
+
+Target Use Case:
+----------------
+- Linux host with AKD1000/AKD1500 via PCIe
+- Standalone C++ inference without Python runtime
+- Production deployment from trained .fbz models
+
+Key Features:
+-------------
+✓ Fully self-contained (no internal links)
+✓ Chip-agnostic (auto-detects AKD1000/AKD1500)
+✓ Extensively commented code
+✓ Complete error handling
+✓ Validation against Python results
+✓ Ready to zip and ship to customers
+
+Version: 1.0
+Date: 2026-02-09
