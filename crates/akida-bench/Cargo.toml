@@ -75,3 +75,7 @@ path = "src/bin/bench_multi_tenancy.rs"
 [[bin]]
 name = "bench_online_evolution"  # Online evolution: 136 gen/sec live adaptation
 path = "src/bin/bench_online_evolution.rs"
+
+[[bin]]
+name = "bench_hw_sw_parity"      # HW vs SW: throughput, energy, accuracy, hybrid potential
+path = "src/bin/bench_hw_sw_parity.rs"
