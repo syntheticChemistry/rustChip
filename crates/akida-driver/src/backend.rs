@@ -101,6 +101,9 @@ pub enum BackendType {
 
     /// VFIO driver (pure Rust with DMA)
     Vfio,
+
+    /// Software (virtual NPU) — f32 CPU simulation, no hardware required
+    Software,
 }
 
 impl std::fmt::Display for BackendType {
@@ -109,6 +112,7 @@ impl std::fmt::Display for BackendType {
             Self::Kernel => write!(f, "Kernel"),
             Self::Userspace => write!(f, "Userspace"),
             Self::Vfio => write!(f, "VFIO"),
+            Self::Software => write!(f, "Software (VirtualNPU)"),
         }
     }
 }
@@ -127,6 +131,9 @@ pub enum BackendSelection {
 
     /// Force VFIO driver (pure Rust with DMA)
     Vfio,
+
+    /// Force software (virtual NPU) backend — for CI and cross-substrate comparison
+    Software,
 }
 
 /// Select appropriate backend based on availability and requirements
@@ -138,6 +145,7 @@ pub enum BackendSelection {
 /// Returns error if no suitable backend can be initialized for the given device.
 pub fn select_backend(selection: BackendSelection, device_id: &str) -> Result<Box<dyn NpuBackend>> {
     use crate::backends::kernel::KernelBackend;
+    use crate::backends::software::SoftwareBackend;
     use crate::backends::userspace::UserspaceBackend;
     use crate::vfio::VfioBackend;
 
@@ -170,6 +178,10 @@ pub fn select_backend(selection: BackendSelection, device_id: &str) -> Result<Bo
 
         BackendSelection::Vfio => {
             VfioBackend::init(device_id).map(|b| Box::new(b) as Box<dyn NpuBackend>)
+        }
+
+        BackendSelection::Software => {
+            SoftwareBackend::init(device_id).map(|b| Box::new(b) as Box<dyn NpuBackend>)
         }
     }
 }

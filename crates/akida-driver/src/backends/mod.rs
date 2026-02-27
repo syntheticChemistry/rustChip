@@ -12,9 +12,11 @@
 
 pub mod kernel;
 pub mod mmap;
+pub mod software;
 pub mod userspace;
 
 pub use kernel::KernelBackend;
+pub use software::SoftwareBackend;
 pub use userspace::UserspaceBackend;
 
 /// Read NPU power consumption from hwmon sysfs (pure Rust, no `glob` crate).

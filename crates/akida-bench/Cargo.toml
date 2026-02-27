@@ -59,3 +59,11 @@ path = "src/bin/bench_latency.rs"
 [[bin]]
 name = "bench_bar"          # Discovery 8: BAR1 16 GB address space probe
 path = "src/bin/bench_bar.rs"
+
+[[bin]]
+name = "bench_esn_substrate"  # Cross-substrate: CPU-f64 vs VirtualNPU-f32 vs AKD1000
+path = "src/bin/bench_esn_substrate.rs"
+
+[[bin]]
+name = "validate_all"         # Full validation: all 10 BEYOND_SDK claims
+path = "src/bin/validate_all.rs"
