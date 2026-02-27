@@ -67,3 +67,11 @@ path = "src/bin/bench_esn_substrate.rs"
 [[bin]]
 name = "validate_all"         # Full validation: all 10 BEYOND_SDK claims
 path = "src/bin/validate_all.rs"
+
+[[bin]]
+name = "bench_multi_tenancy"  # Multi-tenancy: 7 systems on one chip
+path = "src/bin/bench_multi_tenancy.rs"
+
+[[bin]]
+name = "bench_online_evolution"  # Online evolution: 136 gen/sec live adaptation
+path = "src/bin/bench_online_evolution.rs"
