@@ -79,3 +79,15 @@ path = "src/bin/bench_online_evolution.rs"
 [[bin]]
 name = "bench_hw_sw_parity"      # HW vs SW: throughput, energy, accuracy, hybrid potential
 path = "src/bin/bench_hw_sw_parity.rs"
+
+[[bin]]
+name = "bench_exp002_tenancy"    # Exp 002: NP address isolation, 7-system packing
+path = "src/bin/bench_exp002_tenancy.rs"
+
+[[bin]]
+name = "bench_exp004_hybrid_tanh"  # Exp 004: Approach B scale trick validation
+path = "src/bin/bench_exp004_hybrid_tanh.rs"
+
+[[bin]]
+name = "run_experiments"         # Unified runner: Exp 002 + 003 + 004 pass/fail report
+path = "src/bin/run_experiments.rs"

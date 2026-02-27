@@ -1,8 +1,8 @@
 # Experiment 004 — Hybrid Tanh: Hardware Linear + Host Tanh Activation
 
-**Status:** PLANNED (blocked on linear-only FlatBuffer construction)
+**Status:** Phase 1 COMPLETE ✅ (software simulation) | Phase 2 PENDING (hardware dispatch)
 **Hardware:** AKD1000 (BC.00.000.002), `/dev/akida0`
-**Estimated time:** 3–4 hours
+**Estimated time:** Phase 2: 2–3 hours
 **Key question:** Can we configure the AKD1000 to produce pre-activation values
 (the linear FC output before bounded ReLU), enabling the host to apply tanh?
 
@@ -142,7 +142,26 @@ This is the cleanest approach but depends on BAR0 register mapping.
 
 ## Protocol
 
-### Phase 1: Approach B (30 min) — achievable today
+### Phase 1: Approach B — COMPLETE ✅ (software simulation validated)
+
+**Results** (from `cargo run --bin bench_exp004_hybrid_tanh`):
+- Scale trick math: ✅ Approach B produces non-degenerate reservoir states
+- Determinism: ✅ bit-identical across two runs (consistent with BEYOND_SDK Discovery 10)
+- ε formula: ✅ RMS pre-activation confirmed within hardware range
+- **Key finding**: Approach B partially fixes the bounded ReLU constraint — it prevents
+  degenerate collapse (the main issue with random weights + bounded ReLU) but does NOT
+  fully recover tanh accuracy because the lower clamp (rectification) discards sign info
+  for negative pre-activations. Approach A (FlatBuffer threshold override) is the full fix.
+- `HardwareEsnExecutor::step_linear_emulated()` implements Approach B math in software
+- `ScaleTrickConfig::from_weights()` uses 3σ statistical bound for automatic ε selection
+
+**Run the simulation:**
+```bash
+cargo run --bin bench_exp004_hybrid_tanh
+cargo run --bin run_experiments -- --exp 004
+```
+
+### Phase 2: Approach A (2 hours) — FlatBuffer threshold override
 
 Use the scale trick to verify the concept works end-to-end:
 

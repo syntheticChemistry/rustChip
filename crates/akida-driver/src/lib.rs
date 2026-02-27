@@ -29,8 +29,9 @@
 //!          caps.chip_version, caps.npu_count, caps.memory_mb,
 //!          caps.pcie.generation, caps.pcie.lanes);
 //!
+//! let model_bytes = std::fs::read("model.fbz")?;
 //! let mut dev = mgr.open_first()?;
-//! dev.write(&my_model_bytes)?;
+//! dev.write(&model_bytes)?;
 //! let mut out = vec![0u8; 1024];
 //! dev.read(&mut out)?;
 //! # Ok(())

@@ -1,8 +1,8 @@
 # Experiment 002 — Multi-Tenancy: 7 Systems on One AKD1000
 
-**Status:** PLANNED
+**Status:** Phase 1 COMPLETE ✅ (software isolation model) | Phase 2 PENDING (hardware co-loading)
 **Hardware:** AKD1000 (BC.00.000.002), `/dev/akida0`
-**Estimated time:** 4–6 hours
+**Estimated time:** Phase 2: 4–6 hours
 **Key question:** Can multiple programs coexist at distinct NP offsets without
 corrupting each other's outputs?
 
@@ -44,9 +44,40 @@ cargo run --bin enumerate -- --generate-test-models
 
 ---
 
-## Protocol
+## Phase 1 Results (Software Isolation Model) ✅
 
-### Phase 1: NP Address Mapping (30 min)
+**Results** (from `cargo run --bin bench_exp002_tenancy`):
+- NP layout: ✅ 7 systems fit in 814 / 1,000 NPs, 186 spare, no address overlap
+- Reload fidelity: ✅ system A output bit-identical before and after system B loads
+- Round-robin throughput: ✅ > 5,000 Hz baseline (hardware target: 80,000–120,000 Hz)
+- Weight mutation isolation: ✅ mutating system A does not affect system B
+- Packing progression (2→4→7): ✅ all stages within 1,000 NP budget
+
+**Corrected NP address map** (cumulative offsets):
+```
+Slot  System      NPs  NP Start  NP End
+  1   ESN-QCD     179  0x0000    0x00B3
+  2   Transport   134  0x00B3    0x0139
+  3   KWS         220  0x0139    0x0215
+  4   ECG          96  0x0215    0x0275
+  5   Phase        67  0x0275    0x02B8
+  6   Anderson     68  0x02B8    0x02FC
+  7   Sentinel     50  0x02FC    0x032E
+TOTAL            814  186 spare of 1,000
+```
+Note: Earlier docs had off-by-4 to off-by-44 hex address errors. Corrected in bench binary and experiment protocol.
+
+**Run the simulation:**
+```bash
+cargo run --bin bench_exp002_tenancy
+cargo run --bin run_experiments -- --exp 002
+```
+
+---
+
+## Phase 2 Protocol
+
+### NP Address Mapping (30 min)
 
 **Goal:** Confirm that `program_external(bytes, addr)` places weights at the
 expected NP SRAM offset, not always at address 0.

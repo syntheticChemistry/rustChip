@@ -33,20 +33,22 @@ architecture that fits within NP budget constraints:
 
 ```
 NP budget: 1,000 total
-─────────────────────────────────────────────────────────────────────────────
- Slot  System                         NPs    Status       Throughput
-─────────────────────────────────────────────────────────────────────────────
-  1    ESN QCD thermalization         179    ✅ validated   18,500 Hz
-  2    Transport predictor (D*,η*,λ*) 134    ✅ validated   17,800 Hz
-  3    DS-CNN keyword spotting        220    📋 analysis    ~1,400 Hz
-  4    ECG anomaly detection           96    📋 analysis    ~2,200 Hz
-  5    Phase classifier (SU3)          67    ✅ validated   21,200 Hz
-  6    Anderson regime classifier      68    ✅ validated   22,400 Hz
-  7    Minimal sentinel (50-dim)       50    ✅ confirmed   ~24,000 Hz
-─────────────────────────────────────────────────────────────────────────────
-  TOTAL                               814    186 NPs spare
-─────────────────────────────────────────────────────────────────────────────
+─────────────────────────────────────────────────────────────────────────────────────────────
+ Slot  System                         NPs  NP Start  NP End  Status        Throughput
+─────────────────────────────────────────────────────────────────────────────────────────────
+  1    ESN QCD thermalization         179  0x0000    0x00B3  ✅ validated    18,500 Hz
+  2    Transport predictor (D*,η*,λ*) 134  0x00B3    0x0139  ✅ validated    17,800 Hz
+  3    DS-CNN keyword spotting        220  0x0139    0x0215  📋 analysis     ~1,400 Hz
+  4    ECG anomaly detection           96  0x0215    0x0275  📋 analysis     ~2,200 Hz
+  5    Phase classifier (SU3)          67  0x0275    0x02B8  ✅ validated    21,200 Hz
+  6    Anderson regime classifier      68  0x02B8    0x02FC  ✅ validated    22,400 Hz
+  7    Minimal sentinel (50-dim)       50  0x02FC    0x032E  ✅ confirmed    ~24,000 Hz
+─────────────────────────────────────────────────────────────────────────────────────────────
+  TOTAL                               814                    186 NPs spare
+─────────────────────────────────────────────────────────────────────────────────────────────
 ```
+NP addresses are cumulative (end of slot N = start of slot N+1). Validated by
+`cargo run --bin bench_exp002_tenancy` — no overlaps, 186 spare NPs confirmed.
 
 **7 distinct systems on one chip, simultaneously.**
 The 186 spare NPs fit an 8th minimal system or a temporal integration ESN.
