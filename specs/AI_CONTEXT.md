@@ -120,16 +120,59 @@ Unit tests in `akida-chip` require no hardware (pure constants and math).
 
 ---
 
+## Directory structure (beyond crates/)
+
+```
+specs/          Technical spec — read before coding
+baseCamp/       Models, novel systems, extended capabilities
+  systems/      Multi-system architectures and novel NPU applications
+  models/       Per-model docs (physics, edge, custom, beyond_sdk)
+  conversion/   Getting external models into rustChip format
+  zoos/         Third-party zoo landscape survey
+metalForge/     Hardware experiment protocols and results
+  experiments/  Numbered experiment files (002, 003, 004…)
+whitePaper/     Analysis and outreach
+  explorations/ Deep-dive technical writeups
+  outreach/akida/ Material for BrainChip engineering team
+```
+
+These directories are documentation-first: they contain `.md` files describing
+the architecture, experiments, and findings. The code that validates them lives
+in `akida-bench/src/bin/`.
+
+---
+
 ## Benchmark philosophy
 
-Each binary in `akida-bench/src/bin/` reproduces exactly one BEYOND_SDK
-discovery. The file header must state:
-- Which discovery it reproduces (e.g. "Discovery 4 from BEYOND_SDK.md")
-- The reference measurement
-- What SDK claim is being overturned
+**Two types of bench binaries:**
 
-Reference measurements are **not** test assertions — hardware will vary.
-Print the measured value and compare to reference for human judgment.
+1. **BEYOND_SDK reproduction** (`bench_channels`, `bench_dma`, etc.):
+   Each reproduces exactly one discovery. File header states:
+   - Which discovery it reproduces (e.g. "Discovery 4 from BEYOND_SDK.md")
+   - The reference measurement
+   - What SDK claim is being overturned
+   Reference measurements are **not** test assertions — hardware varies.
+
+2. **metalForge experiments** (`bench_exp002_tenancy`, `bench_exp004_hybrid_tanh`, `run_experiments`):
+   Each implements a metalForge experiment protocol. Two phases:
+   - **Phase 1** (software simulation): validates the math and architecture model.
+     Must work without hardware (`/dev/akida0` absent). All Phase 1 must pass CI.
+   - **Phase 2** (hardware dispatch): replaces the SW emulation with actual device calls.
+     Gated behind hardware presence check. Activated by `--hw` flag.
+
+   Pattern:
+   ```rust
+   fn main() {
+       let hw = std::path::Path::new("/dev/akida0").exists();
+       // Phase 1: always runs
+       let (pass, results) = run_phase1(&mut rng);
+       // Phase 2: only when hardware present
+       if hw { let (pass2, results2) = run_phase2_hardware(); }
+   }
+   ```
+
+3. **Unified runner** (`run_experiments`): Runs all pending experiments.
+   Use this to quickly assess project state. Should always exit 0 on CI.
 
 ---
 
@@ -149,6 +192,39 @@ pub const OPTIMAL_BATCH_SIZE: usize = 8;
 For implementation notes that explain hardware behavior (not just the API):
 use `//!` module-level docs or inline `//` comments. Do not write comments
 that just describe the code — only document **why**, not **what**.
+
+---
+
+## HybridEsn / substrate pattern
+
+The `HybridEsn` in `crates/akida-driver/src/hybrid.rs` is the pattern for
+substrate-agnostic inference. hotSpring and toadStool program against the
+`EsnSubstrate` trait, not against a specific backend:
+
+```rust
+// The trait — what hotSpring uses
+pub trait EsnSubstrate: Send + Sync {
+    fn step(&mut self, input: &[f32]) -> Result<Vec<f32>>;
+    fn reset(&mut self);
+    fn substrate_mode(&self) -> SubstrateMode;
+}
+
+// Construction: from tanh-trained weights (no retraining needed for hardware)
+let mut esn = HybridEsn::from_weights(&w_in, &w_res, &w_out, 0.3)?;
+// PureSoftware mode by default — correct tanh behavior, 800 Hz
+let out = esn.step(&input)?;
+
+// Upgrade to hardware when available (same weights, same accuracy, 18,500 Hz):
+// Pending metalForge/experiments/004_HYBRID_TANH Phase 2
+let esn = esn.with_hardware_linear(device)?;
+```
+
+**Key finding**: bounded ReLU clips negative pre-activations to 0, destroying
+half the signal. This makes ESNs with random weights degenerate. `HybridEsn`
+routes the matrix multiply to hardware and applies tanh on the host, bypassing
+the activation constraint entirely. See `whitePaper/explorations/TANH_CONSTRAINT.md`.
+
+**Do not** hardcode tanh or bounded ReLU in physics simulation code. Use `EsnSubstrate`.
 
 ---
 
@@ -198,3 +274,10 @@ The only required changes:
   without it (using VFIO backend as fallback).
 - Do not add tokio as a required (non-feature) dependency. The `async` feature
   gate exists for a reason.
+- Do not hardcode NP addresses. Always use the cumulative address map from
+  `baseCamp/systems/README.md`. The correct addresses are:
+  `0x0000, 0x00B3, 0x0139, 0x0215, 0x0275, 0x02B8, 0x02FC` (7-system packing).
+- Do not use non-ASCII Unicode variable names (e.g. `ε`, `α`) in Rust source.
+  Use ASCII equivalents (`eps`, `alpha`). rustc warns on mixed-script confusables.
+- Do not let bench Phase 1 (software simulation) binaries exit non-zero.
+  They must pass without hardware. Phase 2 failures are expected without hardware.

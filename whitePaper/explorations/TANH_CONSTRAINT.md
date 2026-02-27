@@ -95,8 +95,15 @@ The constraint is gone. The constraint was never physical — it was an activati
 function applied in silicon, applied to the output of a matrix multiply that we
 can receive before the activation fires.
 
-**Status:** Approach B (scale trick) is achievable today.
-Approach A (threshold override via FlatBuffer) is planned in `metalForge/experiments/004_HYBRID_TANH.md`.
+**Status (Feb 27, 2026):**
+- **Approach B (scale trick):** ✅ Phase 1 implemented. `HardwareEsnExecutor::step_linear_emulated()`
+  in `crates/akida-driver/src/hybrid.rs`. Validates math: `run_experiments --exp 004` passes.
+  Honest limitation: lower ReLU clamp discards sign of negative pre-activations —
+  Approach B prevents degenerate collapse but doesn't fully recover tanh dynamics.
+- **Approach A (FlatBuffer threshold override):** Planned in `metalForge/experiments/004_HYBRID_TANH.md`
+  Phase 2. This is the full fix — sets all NP thresholds to max, making bounded ReLU
+  behave as identity. Negative pre-activations pass through unchanged. Validates with
+  negative-input test: output < 0 means linear pass-through confirmed.
 
 ---
 

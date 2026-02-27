@@ -316,24 +316,38 @@ The hybrid executor makes this property measurable.
 
 ---
 
-## Implementation Roadmap
+## Implementation Status (Feb 27, 2026)
 
 | Component | Status |
 |-----------|--------|
 | SoftwareBackend (tanh + true recurrence) | ✅ implemented (`software.rs`) |
-| AkidaDevice (hardware forward pass) | ✅ implemented (validated hotSpring) |
-| `set_variable()` (hardware weight update) | ✅ validated ✅ |
-| Hybrid tanh step (host activations) | 📋 `metalForge/experiments/004` |
-| HybridExecutor struct + trait | 📋 `akida-driver 0.2` |
+| AkidaDevice (hardware forward pass) | ✅ implemented (validated hotSpring Exp 022) |
+| `set_variable()` (hardware weight update) | ✅ validated — 86 µs ✅ |
+| `EsnSubstrate` trait | ✅ implemented (`hybrid.rs`) |
+| `HybridEsn` struct + `SubstrateSelector` | ✅ implemented (`hybrid.rs`) |
+| `EsnWeights` container | ✅ implemented (tanh-trained weight import) |
+| Approach B: scale trick math | ✅ Phase 1 validated (`run_experiments --exp 004`) |
+| Approach B: hardware dispatch | 📋 Phase 2 — `metalForge/experiments/004_HYBRID_TANH` |
+| Approach A: FlatBuffer threshold override | 📋 Phase 2 — same experiment |
 | Online gradient training loop | 📋 `akida-driver 0.2` |
 | Large-model chunking | 📋 `akida-driver 0.3` |
 | Architecture search + compile | 📋 `akida-models 0.3` |
 
-The infrastructure is 80% built. The hybrid executor requires:
-1. A "linear-only" inference mode (no hardware activation) — `program_external()` target
-2. The `HybridExecutor` struct that wraps both backends
-3. The routing logic (static analysis of the model graph)
+**What's working today** (Phase 1):
+- `HybridEsn::from_weights()` — load tanh-trained weights from hotSpring
+- `HybridEsn::step()` — PureSoftware mode: CPU f32 + tanh, 800 Hz, correct results
+- `HybridEsn::with_hardware_linear()` — Approach B emulation: scale trick, non-degenerate
+- `HybridEsn::with_hardware_native()` — SDK bounded ReLU mode (MetaTF weights)
+- `SubstrateSelector::for_weights()` — auto-discovers hardware, falls back to software
 
-None of these require new hardware capabilities. They only require using
-the `program_external()` path we already have, with a carefully constructed
-FlatBuffer program.
+**What Phase 2 unlocks**:
+- Replace `step_linear_emulated()`'s inner matvec with `device.infer()`
+- Uncomment hardware discovery in `SubstrateSelector::for_weights()`
+- Full 18,500 Hz + tanh accuracy simultaneously, no retraining
+
+**To activate Phase 2** (after `metalForge/experiments/004_HYBRID_TANH` Phase 2):
+```bash
+# In hybrid.rs: replace the TODO stub in HardwareEsnExecutor::new_linear()
+# In hybrid.rs: replace step_linear_emulated() inner matvec with device.infer()
+# In hybrid.rs: uncomment the hardware discovery block in SubstrateSelector::for_weights()
+```
