@@ -1,0 +1,5 @@
+info: syncing channel updates for 'stable-x86_64-unknown-linux-gnu'
+info: latest update on 2026-02-12, rust version 1.93.1 (01f6ddf75 2026-02-11)
+info: component 'rust-std' for target 'x86_64-unknown-linux-gnu' is up to date
+info: downloading component 'rust-std' for 'i686-unknown-linux-musl'
+info: installing component 'rust-std' for 'i686-unknown-linux-musl'

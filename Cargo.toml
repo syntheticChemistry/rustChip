@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/akida-chip",
+    "crates/akida-driver",
+    "crates/akida-models",
+    "crates/akida-bench",
+    "crates/akida-cli",
+]
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2021"
+license      = "AGPL-3.0-or-later"
+repository   = "https://github.com/ecoPrimal/rustChip"
+authors      = ["ecoPrimal <ecoPrimal@pm.me>"]
+homepage     = "https://github.com/ecoPrimal/rustChip"
+
+# ── shared dependencies ──────────────────────────────────────────────────────
+[workspace.dependencies]
+# internal
+akida-chip   = { path = "crates/akida-chip" }
+akida-driver = { path = "crates/akida-driver" }
+akida-models = { path = "crates/akida-models" }
+
+# error handling
+thiserror  = "2.0"
+anyhow     = "1.0"
+
+# logging / tracing
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# data
+bytes    = "1.11"
+bytemuck = { version = "1", features = ["derive"] }
+nom      = "7"
+byteorder = "1"
+
+# async (optional)
+tokio = { version = "1", features = ["full"] }
+
+# testing / benchmarking
+criterion    = { version = "0.5", features = ["html_reports"] }
+hex          = "0.4"
+tempfile     = "3"
+
+# CLI
+clap = { version = "4", features = ["derive", "color"] }

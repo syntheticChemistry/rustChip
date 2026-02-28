@@ -1,0 +1,48 @@
+[package]
+name        = "akida-models"
+description = "FlatBuffer model parser and program_external() injection for BrainChip Akida"
+keywords    = ["akida", "flatbuffer", "model", "neuromorphic", "program"]
+categories  = ["parser-implementations", "science"]
+readme      = "README.md"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+repository.workspace = true
+authors.workspace    = true
+
+[dependencies]
+akida-driver = { workspace = true }
+akida-chip   = { workspace = true }
+thiserror    = { workspace = true }
+anyhow       = { workspace = true }
+bytes        = { workspace = true }
+tracing      = { workspace = true }
+nom          = { workspace = true }
+byteorder    = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+hex      = { workspace = true }
+tempfile = { workspace = true }
+
+[dependencies.tracing-subscriber]
+workspace = true
+
+[[bin]]
+name = "model_zoo"
+path = "src/bin/model_zoo.rs"
+
+[[example]]
+name = "parse_fbz"
+path = "examples/parse_fbz.rs"
+
+[[example]]
+name = "run_inference"
+path = "examples/run_inference.rs"
+
+[[example]]
+name = "program_external"
+path = "examples/program_external.rs"
+
+[lib]
+crate-type = ["rlib"]

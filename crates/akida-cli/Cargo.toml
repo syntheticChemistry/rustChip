@@ -1,0 +1,22 @@
+[package]
+name        = "akida-cli"
+description = "Command-line interface for BrainChip Akida: enumerate, bench, bind-vfio, info"
+keywords    = ["akida", "neuromorphic", "cli", "tool", "brainchip"]
+categories  = ["command-line-utilities", "hardware-support"]
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+repository.workspace = true
+authors.workspace    = true
+
+[dependencies]
+akida-driver = { workspace = true }
+akida-chip   = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap         = { workspace = true }
+
+[[bin]]
+name = "akida"
+path = "src/main.rs"

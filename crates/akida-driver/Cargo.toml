@@ -1,0 +1,58 @@
+[package]
+name        = "akida-driver"
+description = "Pure Rust driver for BrainChip Akida — VFIO primary, kernel fallback, full DMA"
+keywords    = ["akida", "neuromorphic", "vfio", "driver", "pcie"]
+categories  = ["hardware-support", "science"]
+readme      = "README.md"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+repository.workspace = true
+authors.workspace    = true
+
+[dependencies]
+akida-chip = { workspace = true }
+thiserror  = { workspace = true }
+anyhow     = { workspace = true }
+bytes      = { workspace = true }
+tracing    = { workspace = true }
+bytemuck   = { workspace = true }
+tokio      = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.0", features = ["fs", "mm"] }
+libc   = "0.2"   # VFIO ioctls only — rustix doesn't cover kernel-specific ioctls
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+criterion          = { workspace = true }
+tokio              = { workspace = true }
+
+[features]
+default  = []
+async    = ["dep:tokio"]
+# Enable when C kernel module is installed; otherwise VFIO is the primary path
+kernel   = []
+
+[[example]]
+name = "enumerate_devices"
+path = "examples/enumerate_devices.rs"
+
+[[example]]
+name = "basic_io"
+path = "examples/basic_io.rs"
+
+[[example]]
+name = "device_info"
+path = "examples/device_info.rs"
+
+[[example]]
+name = "vfio_bind"
+path = "examples/vfio_bind.rs"
+
+[[test]]
+name = "backend_parity"
+path = "tests/backend_parity.rs"
+
+[lib]
+crate-type = ["rlib"]

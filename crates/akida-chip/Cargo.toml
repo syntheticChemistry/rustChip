@@ -1,0 +1,17 @@
+[package]
+name        = "akida-chip"
+description = "Silicon model for BrainChip Akida AKD1000/AKD1500 — register map, NP mesh, BAR layout"
+keywords    = ["akida", "neuromorphic", "registers", "pcie", "brainchip"]
+categories  = ["hardware-support", "no-std"]
+readme      = "README.md"
+version.workspace   = true
+edition.workspace   = true
+license.workspace   = true
+repository.workspace = true
+authors.workspace   = true
+
+# No dependencies — pure model of the silicon.
+# This crate must compile without any hardware present.
+
+[lib]
+crate-type = ["rlib"]

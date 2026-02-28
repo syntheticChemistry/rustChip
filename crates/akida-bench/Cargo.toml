@@ -1,0 +1,93 @@
+[package]
+name        = "akida-bench"
+description = "Benchmark suite — reproduces all 10 BEYOND_SDK hardware discoveries"
+keywords    = ["akida", "benchmark", "neuromorphic", "pcie", "dma"]
+categories  = ["hardware-support", "science"]
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+repository.workspace = true
+authors.workspace    = true
+
+[dependencies]
+akida-driver = { workspace = true }
+akida-chip   = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+# ── discovery benchmarks (one per BEYOND_SDK discovery) ──────────────────────
+[[bin]]
+name = "enumerate"
+path = "src/bin/enumerate.rs"
+
+[[bin]]
+name = "bench_channels"     # Discovery 1: any channel count works
+path = "src/bin/bench_channels.rs"
+
+[[bin]]
+name = "bench_fc_depth"     # Discovery 2: FC chains merge to single HW pass
+path = "src/bin/bench_fc_depth.rs"
+
+[[bin]]
+name = "bench_batch"        # Discovery 3: batch=8 sweet spot (2.4× speedup)
+path = "src/bin/bench_batch.rs"
+
+[[bin]]
+name = "bench_clock_modes"  # Discovery 4: Economy = 19% slower, 18% less power
+path = "src/bin/bench_clock_modes.rs"
+
+[[bin]]
+name = "bench_fc_width"     # Discovery 5: PCIe-dominated below 512 neurons
+path = "src/bin/bench_fc_width.rs"
+
+[[bin]]
+name = "bench_weight_mut"   # Discovery 6: weight mutation without reprogram (~14ms)
+path = "src/bin/bench_weight_mut.rs"
+
+[[bin]]
+name = "bench_dma"          # Discovery 9 / Production: 37 MB/s sustained DMA
+path = "src/bin/bench_dma.rs"
+
+[[bin]]
+name = "bench_latency"      # Production: 54 µs / 18,500 Hz single inference
+path = "src/bin/bench_latency.rs"
+
+[[bin]]
+name = "bench_bar"          # Discovery 8: BAR1 16 GB address space probe
+path = "src/bin/bench_bar.rs"
+
+[[bin]]
+name = "bench_esn_substrate"  # Cross-substrate: CPU-f64 vs VirtualNPU-f32 vs AKD1000
+path = "src/bin/bench_esn_substrate.rs"
+
+[[bin]]
+name = "validate_all"         # Full validation: all 10 BEYOND_SDK claims
+path = "src/bin/validate_all.rs"
+
+[[bin]]
+name = "bench_multi_tenancy"  # Multi-tenancy: 7 systems on one chip
+path = "src/bin/bench_multi_tenancy.rs"
+
+[[bin]]
+name = "bench_online_evolution"  # Online evolution: 136 gen/sec live adaptation
+path = "src/bin/bench_online_evolution.rs"
+
+[[bin]]
+name = "bench_hw_sw_parity"      # HW vs SW: throughput, energy, accuracy, hybrid potential
+path = "src/bin/bench_hw_sw_parity.rs"
+
+[[bin]]
+name = "bench_exp002_tenancy"    # Exp 002: NP address isolation, 7-system packing
+path = "src/bin/bench_exp002_tenancy.rs"
+
+[[bin]]
+name = "bench_exp004_hybrid_tanh"  # Exp 004: Approach B scale trick validation
+path = "src/bin/bench_exp004_hybrid_tanh.rs"
+
+[[bin]]
+name = "run_experiments"         # Unified runner: Exp 002 + 003 + 004 pass/fail report
+path = "src/bin/run_experiments.rs"
