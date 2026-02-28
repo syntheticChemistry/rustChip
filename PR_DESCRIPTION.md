@@ -33,11 +33,10 @@ enough to know the chip is significantly more capable than the SDK reveals.
 
 The full physics simulation lives at
 [syntheticChemistry/hotSpring](https://github.com/syntheticChemistry/hotSpring)
-(lattice QCD + ESN steering) and is built on the shared compute library at
-[syntheticChemistry/toadStool](https://github.com/syntheticChemistry/toadStool)
-(heterogeneous compute dispatch: GPU + NPU + CPU). This repository is the
-AKD1000-specific fruiting body from that work — extracted and cleaned to be
-standalone.
+(lattice QCD + ESN steering) and is built on a broader heterogeneous compute
+library (GPU + NPU + CPU dispatch, pre-publication — see contact below).
+This repository is the AKD1000-specific fruiting body from that work —
+extracted and cleaned to be standalone.
 
 ---
 
