@@ -183,3 +183,9 @@ Remaining for other:   721 NPs
 
 With 721 NPs remaining, 4–5 additional independent systems can run
 alongside the adaptive sentinel without resource conflicts.
+
+---
+
+## Rust Implementation
+
+`DriftMonitor` is scaffolded at [`crates/akida-driver/src/sentinel.rs`](../../crates/akida-driver/src/sentinel.rs), with `DriftAlert`, `DriftConfig`, and `AdaptiveRecovery`. Uses EWMA tracking for domain-shift detection.

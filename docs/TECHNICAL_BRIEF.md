@@ -180,6 +180,22 @@ programming without the SDK compilation pipeline.
 (Akida 2.0), `akida::pico` (compact variant). The v2 codebase includes
 TENNs, 8-bit weights, LUT activations, and skip connections.
 
+### 4.4 SRAM Direct Access (rustChip)
+
+rustChip adds direct BAR0 register and BAR1 SRAM read/write via `SramAccessor`
+and `VfioBackend::map_bar1()`. This capability enables:
+
+- **Model load verification**: Read back NP SRAM after DMA load; compare
+  against expected weights from `.fbz` to verify correct deployment.
+- **Direct weight mutation**: Bypass `set_variable()` overhead by writing
+  to BAR1 SRAM regions directly (via `NpuBackend::mutate_weights()`).
+- **Device fingerprinting**: SRAM power-on state and noise patterns provide
+  a PUF-like signature for attestation and anti-cloning.
+
+The `probe_sram` binary (probe/scan/test modes) and `LoadVerification`
+struct support these workflows. `Capabilities::from_bar0()` extracts runtime
+NP count, SRAM size, and mesh topology from BAR0 registers.
+
 ---
 
 ## 5. Physics Use Cases (Validated + Planned)

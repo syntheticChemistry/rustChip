@@ -8,6 +8,12 @@
 This is the raw source data for the `confirmed` entries in `specs/SILICON_SPEC.md`
 and `crates/akida-chip/src/regs.rs`.
 
+**Evolution:** `SramAccessor`-based probing now supersedes manual VFIO mmap in several
+paths. `bench_bar` uses `SramAccessor` for BAR0 register probing; `probe_sram` adds
+BAR1 SRAM exploration (probe/scan/test modes). `Capabilities::from_bar0()` consumes
+`SramAccessor` reads for runtime discovery. The methodology below remains valid for
+understanding the scan logic; production probing uses `SramAccessor::open()`.
+
 ---
 
 ## Raw Read Log
@@ -101,8 +107,9 @@ at the MMU level.
 ### Scanning Method
 
 ```rust
-// Scan used (see metalForge probe in bench_bar.rs)
-let bar0 = control_regs; // MappedRegion from VFIO
+// Original scan (see metalForge probe in bench_bar.rs)
+// bench_bar now uses SramAccessor::open() + dump_registers() for actual MMIO probing
+let bar0 = control_regs; // MappedRegion from VFIO; SramAccessor provides equivalent
 for offset in (0..=0xffff).step_by(4) {
     let val = bar0.read32(offset);
     if val != 0 && val != 0xffffffff && val != 0xbaddf00d {

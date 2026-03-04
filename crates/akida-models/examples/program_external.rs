@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Demonstrates `program_external()` — loading a model at a specific NP address.
 //!
 //! This is the key mechanism for multi-tenancy (Exp 002) and hybrid tanh (Exp 004).

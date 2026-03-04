@@ -238,12 +238,92 @@ VFIO backends do require unix target (uses `rustix::mm`, `libc` ioctls).
 
 ---
 
-## 8. Unsafe Surface
+## 8. SRAM Access Layer
+
+Two independent paths to on-chip SRAM, both pure Rust:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SRAM Access Paths                             │
+│                                                                   │
+│  Userspace (SramAccessor)          VFIO (VfioBackend)            │
+│  ┌──────────────────┐              ┌──────────────────┐          │
+│  │ sysfs BAR0 mmap  │              │ VFIO BAR0 region │          │
+│  │ sysfs BAR1 mmap  │              │ VFIO BAR1 region │          │
+│  │ No DMA needed    │              │ DMA available    │          │
+│  │ read/write/probe │              │ read_u32/write_u32│          │
+│  └──────────────────┘              └──────────────────┘          │
+│           ↑                                  ↑                   │
+│      SramAccessor::open()           VfioBackend::map_bar1()      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### SramAccessor (userspace path)
+
+`crates/akida-driver/src/sram.rs` — direct BAR0/BAR1 access via sysfs mmap:
+
+```rust
+let mut sram = SramAccessor::open("0000:a1:00.0")?;
+
+// BAR0 registers
+let device_id = sram.read_register(0x0)?;
+
+// BAR1 SRAM (auto-discovers layout from BAR0)
+let data = sram.read_bar1(offset, length)?;
+sram.write_bar1(offset, &new_data)?;
+let results = sram.probe_bar1(&offsets)?;
+sram.scan_bar1_range(start, end)?;
+```
+
+Layout discovery is automatic: `discover_layout()` reads NP_COUNT (0x10C0),
+SRAM_REGION_0 (0x1410), and SRAM_REGION_1 (0x1418) from BAR0 to construct
+a `Bar1Layout` with per-NP strides and region offsets.
+
+### VfioBackend SRAM (DMA-capable path)
+
+```rust
+backend.map_bar1()?;                          // maps BAR1 via VFIO region
+let val = backend.read_sram_u32(offset)?;     // 32-bit SRAM read
+backend.write_sram_u32(offset, value)?;       // 32-bit SRAM write
+assert!(backend.has_sram_mapped());           // check mapping status
+println!("BAR1 size: {}", backend.sram_size()); // mapped region size
+```
+
+### NpuBackend SRAM Methods
+
+All backends expose three SRAM operations via the `NpuBackend` trait:
+
+```rust
+// Model load verification via SRAM readback
+let v = backend.verify_load(&model_bytes)?;   // -> LoadVerification
+
+// Direct weight mutation (zero-DMA for small patches)
+backend.mutate_weights(offset, &patch)?;
+
+// Raw SRAM read
+let data = backend.read_sram(offset, length)?;
+```
+
+### Runtime Capability Discovery
+
+`Capabilities::from_bar0()` reads NP count, SRAM size, and mesh topology
+directly from BAR0 registers — replacing hardcoded sysfs assumptions:
+
+```rust
+let caps = Capabilities::from_bar0("0000:a1:00.0")?;
+// caps.np_count, caps.sram_per_np_kb, caps.mesh (from NP enable bits)
+```
+
+---
+
+## 9. Unsafe Surface
 
 The `vfio/mod.rs` module contains the only unsafe code in the crate. Every
 unsafe block is annotated with:
 - Why it's necessary (the specific kernel API requires it)
 - The invariants that make it safe
 - Who is responsible for maintaining those invariants
+
+`IoHandle` in `src/io.rs` is zero-unsafe — uses `BorrowedFd<'fd>` via `rustix`.
 
 Public API is 100% safe Rust. No unsafe code in `akida-chip`.

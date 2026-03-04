@@ -31,6 +31,11 @@ CPU-resident result
 **Total CPU-mediated overhead:** ~35–50 µs for a 512-float feature vector.
 This is negligible compared to the 54–390 µs NPU inference itself.
 
+**SRAM readback verification:** After the GPU computes and the NPU loads weights
+via DMA, `NpuBackend::verify_load()` (SRAM readback) can confirm correct loading
+before inference. This GPU→NPU verification path ensures model integrity in
+safety-critical or multi-substrate pipelines.
+
 For Experiment 022, the GPU trajectory takes 7.6 seconds. 50 µs is 0.0007%
 of wall time. CPU mediation is not the bottleneck.
 

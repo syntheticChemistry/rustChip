@@ -78,14 +78,16 @@ With the 11-head pattern (SkipDMA, single program):
 
 | System | NPs | Capability | Status |
 |--------|-----|-----------|--------|
-| [Multi-tenancy controller](multi_tenancy.md) | 814 | 7 simultaneous domains | Architecture defined |
-| [Online evolution engine](online_evolution.md) | 179+50 | 136 gen/sec live adaptation | ✅ validated (wetSpring) |
+| [Multi-tenancy controller](multi_tenancy.md) | 814 | 7 simultaneous domains | [scaffolded](../../crates/akida-driver/src/tenancy.rs) |
+| [Online evolution engine](online_evolution.md) | 179+50 | 136 gen/sec live adaptation | [scaffolded](../../crates/akida-driver/src/evolution.rs), ✅ validated (wetSpring) |
 | [NPU conductor (11-head)](npu_conductor.md) | 179 | 11 physics outputs, 1 program | ✅ validated (hotSpring Exp 023) |
 | [Chaotic attractor tracker](chaotic_attractor.md) | 259 | ESN for Lorenz/Rössler/MSLP | Architecture + NeuroBench ref |
-| [Temporal PUF](temporal_puf.md) | 68 | Hardware fingerprinting, 6.34 bits | ✅ validated (wetSpring NPU) |
-| [Adaptive edge sentinel](adaptive_sentinel.md) | 179+50 | Domain-shift detection + adapt | ✅ validated (wetSpring) |
+| [Temporal PUF](temporal_puf.md) | 68 | Hardware fingerprinting, 6.34 bits | [scaffolded](../../crates/akida-driver/src/puf.rs), ✅ validated (wetSpring NPU) |
+| [Adaptive edge sentinel](adaptive_sentinel.md) | 179+50 | Domain-shift detection + adapt | [scaffolded](../../crates/akida-driver/src/sentinel.rs), ✅ validated (wetSpring) |
 | [Neuromorphic PDE solver](neuromorphic_pde.md) | 200-400 | Poisson/heat via multi-pass FC | Planned |
 | [Physics surrogate ensemble](physics_surrogate.md) | 560 | 4-domain co-located surrogates | Architecture defined |
+
+[Hybrid executor](hybrid_executor.md): `HybridEsn` is complete; SRAM weight verification via `verify_load()`.
 
 ---
 

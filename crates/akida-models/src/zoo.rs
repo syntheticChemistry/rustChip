@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Akida Model Zoo Manager
 //!
 //! Provides utilities for downloading, converting, and managing
@@ -613,13 +615,25 @@ impl ModelZoo {
         println!();
 
         let sections: &[(&str, &[ZooModel])] = &[
-            ("ecoPrimals Physics (validated on AKD1000)", ZooModel::ecoprimal_physics_models()),
+            (
+                "ecoPrimals Physics (validated on AKD1000)",
+                ZooModel::ecoprimal_physics_models(),
+            ),
             ("NeuroBench Benchmarks", ZooModel::neurobench_models()),
-            ("BrainChip MetaTF Zoo", &[
-                ZooModel::DsCnnKws, ZooModel::DvsGesture, ZooModel::AkidaNet05_160,
-                ZooModel::AkidaNet10_224, ZooModel::MobileNetV2, ZooModel::YoloV8n,
-                ZooModel::PointNetPlusPlus, ZooModel::EventCamera, ZooModel::ViTTiny,
-            ]),
+            (
+                "BrainChip MetaTF Zoo",
+                &[
+                    ZooModel::DsCnnKws,
+                    ZooModel::DvsGesture,
+                    ZooModel::AkidaNet05_160,
+                    ZooModel::AkidaNet10_224,
+                    ZooModel::MobileNetV2,
+                    ZooModel::YoloV8n,
+                    ZooModel::PointNetPlusPlus,
+                    ZooModel::EventCamera,
+                    ZooModel::ViTTiny,
+                ],
+            ),
             ("Hand-Built", &[ZooModel::MinimalFc]),
         ];
 
@@ -627,14 +641,12 @@ impl ModelZoo {
             println!("  {section}");
             for model in *models {
                 let file_status = if let Some(meta) = self.metadata.get(model) {
-                    format!(
-                        "✓ {:>7} bytes",
-                        meta.size_bytes,
-                    )
+                    format!("✓ {:>7} bytes", meta.size_bytes,)
                 } else {
                     "✗ not cached ".to_string()
                 };
-                let thr = model.throughput_hz()
+                let thr = model
+                    .throughput_hz()
                     .map(|hz| format!("{hz:>6} Hz"))
                     .unwrap_or_else(|| "   n/a   ".to_string());
                 let np = model.np_budget();
@@ -776,10 +788,7 @@ mod tests {
             ZooModel::PhaseClassifierSu3.task(),
             ModelTask::PhysicsClassification
         );
-        assert_eq!(
-            ZooModel::EcgAnomaly.task(),
-            ModelTask::AnomalyDetection
-        );
+        assert_eq!(ZooModel::EcgAnomaly.task(), ModelTask::AnomalyDetection);
         assert_eq!(
             ZooModel::EsnQcdThermalization.task(),
             ModelTask::TimeSeriesPrediction

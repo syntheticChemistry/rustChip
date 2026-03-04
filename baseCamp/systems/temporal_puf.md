@@ -138,6 +138,12 @@ Computationally equivalent to a 101-bit key, with zero key storage.
 
 ---
 
+## Rust Implementation
+
+PUF measurement is scaffolded at [`crates/akida-driver/src/puf.rs`](../../crates/akida-driver/src/puf.rs), with `PufSignature`, `PufConfig`, `measure_puf()`, `puf_entropy()`, and `puf_hamming_distance()`. Uses `SramAccessor` for write/readback.
+
+---
+
 ## BrainChip Connection
 
 This capability is not in any SDK documentation. It emerges from:

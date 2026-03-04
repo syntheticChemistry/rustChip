@@ -1,8 +1,8 @@
 # Building Akida Programs from Scratch in Rust
 
 **Scope:** Hand-craft any Akida-compatible network entirely in Rust
-**Status:** `program_external()` path confirmed (BEYOND_SDK Discovery 3)
-           `akida-models::builder` queued for 0.2
+**Status:** `program_external()` path confirmed (BEYOND_SDK Discovery 3);
+           `ProgramBuilder` scaffolded at [`crates/akida-models/src/builder.rs`](../../crates/akida-models/src/builder.rs)
 **Prerequisites:** rustChip (no Python, no MetaTF, no SDK)
 
 ---

@@ -158,6 +158,37 @@ the entire SDK compilation pipeline. This is the foundation of `akida-models`.
 
 ---
 
+## 4.1 SRAM Access Layer (New Capability)
+
+The driver now exposes direct BAR0/BAR1 read/write via `SramAccessor`, enabling
+full access to on-chip memory without DMA round-trips. Key components:
+
+| Component | Purpose |
+|-----------|---------|
+| `SramAccessor` | Direct BAR0/BAR1 read/write; bypasses DMA for register and SRAM access |
+| `VfioBackend::map_bar1()` | VFIO-maps BAR1 (NP mesh / SRAM window) for userspace access |
+| `Capabilities::from_bar0()` | Runtime NP/SRAM discovery from BAR0 registers — no static config |
+| `NpuBackend::verify_load()` | Model integrity via SRAM readback; compares loaded weights to expected |
+| `NpuBackend::mutate_weights()` | Direct weight mutation in SRAM — zero-DMA online learning path (~86 µs) |
+| `NpuBackend::read_sram()` | Raw SRAM readback for verification, fingerprinting, or debugging |
+| `LoadVerification` | Struct for model load integrity checks (expected vs actual) |
+| `probe_sram` binary | Three modes: probe (single-register), scan (range), test (readback validation) |
+
+**Direct weight mutation** enables zero-DMA online learning: weights can be
+updated in-place via BAR1 without a full model reload. At ~86 µs per update,
+this supports fast reservoir adaptation and evolutionary search.
+
+**Model load verification** via SRAM readback confirms that weights loaded from
+GPU or host match what the NPU actually holds before inference — critical for
+safety-critical or GPU→NPU pipelines.
+
+**Device fingerprinting** via int4 quantization noise is scaffolded in `puf.rs`.
+The `DriftMonitor` sentinel module (`sentinel.rs`) and `NpuEvolver` evolution
+module (`evolution.rs`) provide scaffolding for runtime monitoring and
+evolutionary learning workflows.
+
+---
+
 ## 5. Driver Architecture
 
 ### 5.1 Crate Map

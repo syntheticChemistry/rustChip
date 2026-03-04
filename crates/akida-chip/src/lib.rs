@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Silicon model for BrainChip Akida AKD1000 / AKD1500.
 //!
 //! This crate has **no dependencies** and **no hardware access** — it is a
@@ -18,6 +20,7 @@
 //! | [`program`] | FlatBuffer `program_info` / `program_data` format |
 
 #![forbid(unsafe_code)]
+#![deny(clippy::expect_used, clippy::unwrap_used)]
 #![warn(missing_docs)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -27,3 +30,4 @@ pub mod mesh;
 pub mod pcie;
 pub mod program;
 pub mod regs;
+pub mod sram;

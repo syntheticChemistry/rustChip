@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Akida device handle and operations
 //!
 //! # Evolution (Feb 12, 2026)
@@ -7,7 +9,7 @@
 use rustix::fs::OFlags;
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, RawFd};
 use std::path::Path;
 
 use crate::discovery::DeviceInfo;
@@ -25,9 +27,6 @@ pub struct AkidaDevice {
 
     /// Underlying device handle
     handle: DeviceHandle,
-
-    /// I/O operations handler
-    io: IoHandle,
 }
 
 /// Low-level device file handle
@@ -46,15 +45,19 @@ impl AkidaDevice {
         tracing::debug!("Opening device {}: {}", info.index, info.path.display());
 
         let handle = DeviceHandle::open(&info.path, info.index)?;
-        let io = IoHandle::new(handle.as_raw_fd());
 
         tracing::info!("Opened device {}: {}", info.index, info.path.display());
 
         Ok(Self {
             info: info.clone(),
             handle,
-            io,
         })
+    }
+
+    /// Borrow an I/O handle for device read/write operations.
+    /// The handle borrows the device's file descriptor — zero unsafe.
+    fn io(&self) -> IoHandle<'_> {
+        IoHandle::new(&self.handle.file)
     }
 
     /// Get device index
@@ -83,7 +86,7 @@ impl AkidaDevice {
     ///
     /// Returns error if transfer fails or times out.
     pub fn write(&mut self, data: &[u8]) -> Result<usize> {
-        self.io.write(data)
+        self.io().write(data)
     }
 
     /// Read data from device
@@ -94,7 +97,7 @@ impl AkidaDevice {
     ///
     /// Returns error if transfer fails or times out.
     pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        self.io.read(buffer)
+        self.io().read(buffer)
     }
 
     /// Get raw file descriptor (for advanced use)

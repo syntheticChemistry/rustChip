@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Device capability querying and representation
 //!
 //! This module provides runtime capability discovery for Akida devices.
@@ -84,6 +86,49 @@ impl MeshTopology {
             y,
             z,
             functional_count,
+        })
+    }
+
+    /// Discover mesh topology from BAR0 NP enable bits.
+    ///
+    /// Reads the NP count register and NP enable bit array to determine
+    /// the actual functional NP count. Assumes AKD1000 5x8x2 geometry
+    /// when only the count is available (geometry requires sysfs or
+    /// deeper probing).
+    pub fn from_bar0(sram: &crate::sram::SramAccessor) -> Option<Self> {
+        let np_reg = sram.read_np_count().ok()?;
+        if np_reg == 0 || np_reg > 1000 {
+            return None;
+        }
+
+        // Count enabled NPs from the enable bit registers (0x1E0C–0x1E20)
+        let mut enabled = 0u32;
+        for i in 0..akida_chip::regs::NP_ENABLE_COUNT {
+            if let Ok(val) = sram.read_register(akida_chip::regs::NP_ENABLE_BASE + i * 4) {
+                enabled += val.count_ones();
+            }
+        }
+
+        let functional = if enabled > 0 { enabled } else { np_reg };
+
+        // AKD1000 geometry: 5x8x2=80 slots. For other chips, default to 1D.
+        let (x, y, z) = if functional <= 80 {
+            (5, 8, 2)
+        } else {
+            #[allow(clippy::cast_possible_truncation)]
+            let n = functional.min(255) as u8;
+            (n, 1, 1)
+        };
+
+        tracing::info!(
+            "Mesh from BAR0: NP_COUNT={np_reg}, enabled_bits={enabled}, functional={functional}"
+        );
+
+        Some(Self {
+            x,
+            y,
+            z,
+            functional_count: functional,
         })
     }
 
@@ -512,6 +557,98 @@ impl Capabilities {
         let clock_mode = Self::query_clock_mode(pcie_address);
         let batch = BatchCapabilities::from_sysfs(pcie_address);
         let weight_mutation = Self::query_weight_mutation(pcie_address);
+
+        Ok(Self {
+            chip_version,
+            npu_count,
+            memory_mb,
+            pcie,
+            power_mw,
+            temperature_c,
+            mesh,
+            clock_mode,
+            batch,
+            weight_mutation,
+        })
+    }
+
+    /// Discover capabilities directly from BAR0 hardware registers.
+    ///
+    /// This is the ground-truth path — reads actual hardware state instead
+    /// of relying on sysfs attributes that may be absent or stale.
+    /// Falls back to sysfs for values that only exist there (PCIe config,
+    /// hwmon power/temp, clock mode).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if BAR0 cannot be mapped or key registers are unreadable.
+    pub fn from_bar0(pcie_address: &str) -> Result<Self> {
+        use crate::sram::SramAccessor;
+
+        tracing::info!("Discovering capabilities from BAR0 registers for {pcie_address}");
+
+        let sram = SramAccessor::open(pcie_address)?;
+
+        // Ground truth: device identity from hardware
+        let device_id_reg = sram.read_device_id()?;
+        let chip_version = match device_id_reg {
+            0x194000a1 | 0x1E7C_BCA1 => ChipVersion::Akd1000,
+            v if v & 0xFFFF == 0xBCA2 => ChipVersion::Akd1500,
+            _ => {
+                tracing::warn!("Unknown device ID {device_id_reg:#010x}, trying sysfs");
+                Self::read_chip_version(pcie_address)
+                    .unwrap_or(ChipVersion::from_register(device_id_reg))
+            }
+        };
+
+        // Ground truth: NP count from register 0x10C0
+        let np_reg = sram.read_np_count().unwrap_or(0);
+        let npu_count = if np_reg > 0 && np_reg < 1000 {
+            tracing::info!("NP count from BAR0: {np_reg}");
+            np_reg
+        } else {
+            Self::query_npu_count(pcie_address, chip_version)
+        };
+
+        // Ground truth: SRAM configuration from registers
+        let memory_mb = match sram.read_sram_config() {
+            Ok(cfg) => {
+                let sram_size_hint = u64::from(cfg.region_0) * u64::from(cfg.region_1);
+                if sram_size_hint > 0 {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let mb = (sram_size_hint / (1024 * 1024)).max(1) as u32;
+                    tracing::info!(
+                        "SRAM from BAR0: region_0={:#x}, region_1={:#x} → {mb} MB estimate",
+                        cfg.region_0,
+                        cfg.region_1
+                    );
+                    mb
+                } else {
+                    chip_version.typical_memory_mb()
+                }
+            }
+            Err(_) => chip_version.typical_memory_mb(),
+        };
+
+        // Ground truth: mesh topology from NP enable bits
+        let mesh =
+            MeshTopology::from_bar0(&sram).or_else(|| MeshTopology::from_sysfs(pcie_address));
+
+        // Remaining values from sysfs (only available there)
+        let pcie = PcieConfig::from_sysfs(pcie_address).unwrap_or_else(|_| PcieConfig::new(2, 1));
+        let power_mw = Self::query_power_consumption(pcie_address);
+        let temperature_c = Self::query_temperature(pcie_address);
+        let clock_mode = Self::query_clock_mode(pcie_address);
+        let batch = BatchCapabilities::from_sysfs(pcie_address);
+        let weight_mutation = Self::query_weight_mutation(pcie_address);
+
+        tracing::info!(
+            "BAR0 capabilities: {:?}, {} NPs, {} MB SRAM, mesh={:?}",
+            chip_version,
+            npu_count,
+            memory_mb,
+            mesh
+        );
 
         Ok(Self {
             chip_version,

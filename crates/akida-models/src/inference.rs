@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Model inference integration
 //!
 //! Bridges model metadata with device inference execution.
@@ -57,8 +59,7 @@ impl Model {
 
         tracing::info!("Running inference on device {}", device.index());
 
-        // Get model input/output shapes (self-knowledge!)
-        let (input_shape, output_shape) = Self::get_io_shapes();
+        let (input_shape, output_shape) = self.io_shapes();
 
         // Create inference config from model metadata
         let config = InferenceConfig::new(
@@ -84,45 +85,85 @@ impl Model {
         Ok(result)
     }
 
-    /// Get input size in bytes
+    /// Get input size in bytes.
     ///
-    /// **Deep Debt**: Self-knowledge!
-    /// Model knows its own input requirements.
+    /// Uses model layer metadata when available, falls back to
+    /// program size heuristic when FlatBuffers shapes aren't parsed.
     pub fn input_size(&self) -> usize {
-        // Use the same logic as get_io_shapes for consistency
-        let (input_shape, _) = Self::get_io_shapes();
+        let (input_shape, _) = self.io_shapes();
         input_shape.iter().product()
     }
 
-    /// Get output size in bytes
+    /// Get output size in bytes.
     ///
-    /// **Deep Debt**: Self-knowledge!
-    /// Model knows its own output shape.
+    /// Uses model layer metadata when available, falls back to
+    /// program size heuristic when FlatBuffers shapes aren't parsed.
     pub fn output_size(&self) -> usize {
-        // Use the same logic as get_io_shapes for consistency
-        let (_, output_shape) = Self::get_io_shapes();
+        let (_, output_shape) = self.io_shapes();
         output_shape.iter().product()
     }
 
-    /// Get input and output shapes from model
+    /// Extract input/output shapes from model structure.
     ///
-    /// **Deep Debt**: Self-knowledge!
-    /// Extract actual shapes from model structure, not hardcoded.
-    fn get_io_shapes() -> (Vec<usize>, Vec<usize>) {
-        // For minimal models, use simple shapes
-        // In production, these would be extracted from layer metadata
+    /// Traverses the layer graph: the first layer's input shape is
+    /// the model input; the last layer's output shape is the model output.
+    /// When shapes are not yet parsed (pending FlatBuffers schema), derives
+    /// a reasonable estimate from program size and layer count.
+    fn io_shapes(&self) -> (Vec<usize>, Vec<usize>) {
+        let layers = self.layers();
 
-        // Minimal fallback for test models
-        let input_shape = vec![8]; // 8 bytes input
-        let output_shape = vec![4]; // 4 bytes output
+        // Try to get shapes from first/last layers
+        let input_shape = layers
+            .first()
+            .filter(|l| !l.input_shape.is_empty())
+            .map(|l| l.input_shape.clone());
+
+        let output_shape = layers
+            .last()
+            .filter(|l| !l.output_shape.is_empty())
+            .map(|l| l.output_shape.clone());
+
+        if let (Some(inp), Some(out)) = (input_shape, output_shape) {
+            return (inp, out);
+        }
+
+        // Heuristic fallback: derive from program size and weight count.
+        // AKD1000 standard Akida models use uint8 I/O with shapes derivable
+        // from the weight geometry. Until FlatBuffers schema parsing is
+        // complete, use program metadata to estimate.
+        let total_weights = self.total_weight_count();
+        let estimated_input = if total_weights > 0 {
+            // Infer from first weight block dimension
+            self.weights()
+                .first()
+                .and_then(|w| w.shape.as_ref())
+                .map_or_else(
+                    || vec![self.program_size().min(1024)],
+                    |s| {
+                        if s.len() >= 2 {
+                            vec![s[s.len() - 1]]
+                        } else {
+                            vec![s[0]]
+                        }
+                    },
+                )
+        } else {
+            vec![self.program_size().min(1024)]
+        };
+
+        let estimated_output = self
+            .weights()
+            .last()
+            .and_then(|w| w.shape.as_ref())
+            .map_or(vec![self.layer_count().max(1)], |s| vec![s[0]]);
 
         tracing::debug!(
-            "Using default I/O shapes: input={:?}, output={:?}",
-            input_shape,
-            output_shape
+            "Estimated I/O shapes from model metadata: input={:?}, output={:?}",
+            estimated_input,
+            estimated_output
         );
 
-        (input_shape, output_shape)
+        (estimated_input, estimated_output)
     }
 }
 

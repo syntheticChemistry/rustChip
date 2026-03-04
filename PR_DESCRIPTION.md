@@ -45,10 +45,10 @@ extracted and cleaned to be standalone.
 ### 1. Pure Rust driver (no C, no Python, no SDK at runtime)
 
 ```
-crates/akida-chip/    silicon model — register map, BAR layout, NP mesh (zero deps)
-crates/akida-driver/  full driver — VFIO primary, kernel fallback, DMA, inference
-crates/akida-models/  FlatBuffer model parser + program_external() injection
-crates/akida-bench/   23 benchmark binaries — hardware discovery + experiment suite
+crates/akida-chip/    silicon model — register map, BAR layout, NP mesh, SRAM model
+crates/akida-driver/  full driver — VFIO, kernel, SRAM access, tenancy, evolution, PUF, sentinel
+crates/akida-models/  FlatBuffer parser + ProgramBuilder + model zoo
+crates/akida-bench/   benchmark suite — hardware discovery + experiments + SRAM probe
 crates/akida-cli/     `akida` command-line tool
 ```
 
@@ -106,6 +106,20 @@ Total: 814 / 1,000 NPs — 186 spare
 
 Each program lives at a distinct NP address via `program_external(bytes, address)`.
 `set_variable()` updates one system's weights without touching the others.
+
+**Direct SRAM access — read/write all on-chip memory:**
+```bash
+cargo run --bin probe_sram           # read-only BAR0 + BAR1 probe
+cargo run --bin probe_sram -- scan   # deep scan for non-zero data
+cargo run --bin probe_sram -- test   # write/readback verification
+```
+
+Two paths: `SramAccessor` (sysfs mmap, no VFIO) and `VfioBackend::map_bar1()`.
+Runtime capability discovery via `Capabilities::from_bar0()` — reads NP count,
+SRAM size, and mesh topology from BAR0 registers. No hardcoded assumptions.
+
+`NpuBackend` trait: `verify_load()` for model integrity, `mutate_weights()` for
+zero-DMA weight patches (~86 µs), `read_sram()` for raw state inspection.
 
 **Other validated capabilities:**
 - Online weight evolution: 136 gen/sec live adaptation via `set_variable()` + batch=8

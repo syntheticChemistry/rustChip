@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! PCIe BAR layout for AKD1000 / AKD1500.
 //!
 //! Measured via sysfs `/sys/bus/pci/devices/{addr}/resource` probing.
@@ -79,8 +81,8 @@ impl Bar {
     #[must_use]
     pub const fn typical_size(&self) -> u64 {
         match self {
-            Self::Control  => bar0::SIZE,
-            Self::Mesh     => bar1::DECODE_SIZE,
+            Self::Control => bar0::SIZE,
+            Self::Mesh => bar1::DECODE_SIZE,
             Self::Secondary => bar3::SIZE,
         }
     }

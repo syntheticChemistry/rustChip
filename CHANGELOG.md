@@ -1,5 +1,81 @@
 # Changelog
 
+## [Unreleased] — SRAM access + deep-debt evolution (Mar 2026)
+
+### Key additions
+
+- **Direct SRAM read/write**: Full BAR0 register dump and BAR1 memory-mapped access to all
+  on-chip SRAM. Two independent paths: userspace (`SramAccessor` via sysfs mmap) and VFIO
+  (`VfioBackend::map_bar1()` + `read_sram_u32` / `write_sram_u32`).
+- **Runtime capability discovery**: `Capabilities::from_bar0()` reads NP count, SRAM size,
+  and mesh topology from BAR0 registers. No hardcoded silicon assumptions.
+- **NpuBackend SRAM evolution**: `verify_load()`, `mutate_weights()`, `read_sram()` added
+  to the `NpuBackend` trait with `LoadVerification` struct for model integrity checks.
+- **Zero-unsafe I/O**: `IoHandle` refactored to `rustix::fd::BorrowedFd` — no `unsafe` blocks.
+- **Typed errors**: `anyhow` removed from all library crates. `AkidaError` used throughout.
+- **11 new tests**: ESN determinism (3), parser round-trip (8).
+
+### Added — crates
+
+**`crates/akida-chip`**
+- `src/sram.rs` — `SramKind` (Filter/Threshold/Event/Status), `SramRegion`, `Bar1Layout`
+  (per-NP stride, region offset calculation), `ProbePoint`, `ProbeResult`. Dynamic layout
+  via `from_np_count()`, `from_discovered()`, and `akd1000()` factory.
+
+**`crates/akida-driver`**
+- `src/sram.rs` — `SramAccessor`: BAR0 register R/W, BAR1 SRAM R/W, multi-point probe,
+  range scan. `discover_layout()` reads NP_COUNT and SRAM region registers from BAR0
+  to construct `Bar1Layout` dynamically.
+- `src/tenancy.rs` — `MultiTenantDevice`, `ProgramSlot`: NP slot management, model loading
+  at arbitrary NP offsets, SRAM-backed cross-slot isolation verification.
+- `src/evolution.rs` — `NpuEvolver`, `WeightPatch`, `EvolutionConfig`, `FitnessEvaluator`
+  trait: online weight evolution via direct SRAM mutation (zero-DMA path).
+- `src/puf.rs` — `PufSignature`, `PufConfig`, `measure_puf()`, `puf_entropy()`,
+  `puf_hamming_distance()`: device fingerprinting via int4 quantization noise.
+- `src/sentinel.rs` — `DriftMonitor`, `DriftAlert`, `DriftConfig`, `AdaptiveRecovery`:
+  EWMA-based domain-shift detection with automatic weight re-evolution or model reload.
+- `src/backend.rs` — `NpuBackend` trait: `verify_load()`, `mutate_weights()`, `read_sram()`
+  with default implementations. `LoadVerification` struct.
+- `src/capabilities.rs` — `Capabilities::from_bar0()`, `MeshTopology::from_bar0()`:
+  runtime NP count, SRAM size, enabled-NP bitmask from BAR0 registers.
+- `src/vfio/mod.rs` — `VfioBackend::map_bar1()`, `read_sram_u32()`, `write_sram_u32()`,
+  `has_sram_mapped()`, `sram_size()`: direct BAR1 SRAM access via VFIO mapped memory.
+- `src/loading.rs` — `ModelLoader::verify_with_sram()`: model load integrity via readback.
+
+**`crates/akida-models`**
+- `src/builder.rs` — `ProgramBuilder`, `LayerSpec`, `QuantConfig`, `EsnProgramBuilder`:
+  layer-by-layer FlatBuffer program construction for custom model creation.
+
+**`crates/akida-bench`**
+- `probe_sram` binary — 3-mode SRAM diagnostic tool:
+  - `probe` (default): read-only BAR0 register dump + BAR1 region probe
+  - `scan`: deep scan for non-zero data across full BAR1 address space
+  - `test`: destructive write/readback verification
+- `bench_bar.rs` — evolved: now includes actual MMIO BAR0 register probing via `SramAccessor`
+- `bench_exp002_tenancy.rs` — Phase 2 (`--hw`): SRAM isolation probe, NP enable bits,
+  BAR1 boundary verification
+
+### Changed
+
+- `IoHandle` — zero-unsafe: uses `BorrowedFd<'fd>` via `rustix` instead of raw `RawFd`
+- `AkidaDevice` — constructs `IoHandle` on-demand (no stored raw fd)
+- `setup.rs` — migrated from `anyhow::{bail, Context, Result}` to `AkidaError`
+- `akida-models/Cargo.toml` — removed `nom`, `byteorder`, `anyhow`
+- `akida-driver/Cargo.toml` — removed `anyhow`
+- `inference.rs` — `io_shapes()` dynamically extracts from layer metadata (no hardcoded shapes)
+- `parser.rs` — `estimate_layer_count()` uses FlatBuffers root table traversal
+- `akida-bench/src/lib.rs` — centralized `HardwareProbe`, `Xoshiro`, `BenchTimer`
+- Benchmark binaries — use `HardwareProbe` for capability-based device discovery
+
+### Tests added
+
+- `crates/akida-driver/tests/esn_determinism.rs` — 3 tests: deterministic reservoir,
+  identical output across runs, spectral radius sensitivity
+- `crates/akida-models/tests/parser_roundtrip.rs` — 8 tests: FlatBuffer header parsing,
+  model metadata, IO shape extraction, zoo model validation
+
+---
+
 ## [Unreleased] — Phase 1 experiment validation + novel systems (Feb 27, 2026)
 
 ### Key finding

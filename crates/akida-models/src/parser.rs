@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Binary parser for Akida .fbz files
 //!
 //! Parses FlatBuffers-based Akida model files.
@@ -97,28 +99,99 @@ fn try_extract_version_at(data: &[u8], offset: usize) -> Option<String> {
     None
 }
 
-/// Estimate number of layers (simplified heuristic)
+/// Count layers by traversing FlatBuffers table structure.
+///
+/// FlatBuffers layout: bytes [0..4] are file identifier/magic,
+/// bytes [4..8] are the root table offset (little-endian u32).
+/// The root table contains a vtable pointer and field offsets.
+/// We look for array-of-tables patterns (layer vectors) by
+/// counting `layer_type` metadata strings as confirmed markers,
+/// then cross-validate with FlatBuffers vector length fields
+/// (u32 element counts preceding table offset arrays).
 fn estimate_layer_count(data: &[u8]) -> usize {
-    // Count occurrences of "layer_type" string as a proxy
-    let pattern = b"layer_type";
+    // Primary: count confirmed layer_type metadata markers
+    let marker_count = data
+        .windows(b"layer_type".len())
+        .filter(|w| *w == b"layer_type")
+        .count();
 
-    data.windows(pattern.len())
-        .filter(|window| *window == pattern)
-        .count()
-        .max(1) // At least 1 layer
+    if marker_count > 0 {
+        return marker_count;
+    }
+
+    // Secondary: attempt FlatBuffers root table traversal.
+    // Root table offset is at bytes 4..8 (after the 4-byte magic/identifier).
+    if data.len() >= 12 {
+        let root_offset = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        // The root table starts with a negative vtable offset (i32),
+        // then field data. A layer vector field would store a u32
+        // element count followed by table offsets.
+        if root_offset < data.len().saturating_sub(8) {
+            let table_start = root_offset;
+            // Scan nearby offsets for small vector-length candidates (1..128)
+            for probe in
+                (table_start..data.len().saturating_sub(4).min(table_start + 64)).step_by(4)
+            {
+                let candidate = u32::from_le_bytes([
+                    data[probe],
+                    data[probe + 1],
+                    data[probe + 2],
+                    data[probe + 3],
+                ]);
+                if (1..128).contains(&candidate) {
+                    // Validate: if this many 4-byte offsets follow and stay in-bounds
+                    let vec_end = probe + 4 + candidate as usize * 4;
+                    if vec_end <= data.len() {
+                        return candidate as usize;
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: at least 1 layer for any parseable model
+    1
 }
 
-/// Extract layer names from model data
+/// Extract layer names from model data.
+///
+/// Strategy: First try FlatBuffers-aware extraction by following string
+/// offset pointers in the binary data, then fall back to a linear scan
+/// for null-terminated ASCII strings matching neural-network layer patterns.
 pub fn extract_layer_names(data: &[u8]) -> Vec<String> {
+    // Primary: FlatBuffers string references.
+    // FlatBuffers stores strings as (u32 length, UTF-8 data, NUL).
+    // String offsets appear as relative u32 pointers in tables.
     let mut names = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    // Common layer name patterns: "input", "fc", "conv", etc.
-    // They appear as null-terminated strings in the metadata section
+    // Scan for FlatBuffers-style length-prefixed strings
+    for i in (0..data.len().saturating_sub(8)).step_by(4) {
+        let len_bytes = &data[i..i + 4];
+        let str_len =
+            u32::from_le_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]) as usize;
+        if (2..32).contains(&str_len) && i + 4 + str_len < data.len() {
+            let str_data = &data[i + 4..i + 4 + str_len];
+            // Check null terminator after string
+            if data.get(i + 4 + str_len) == Some(&0) {
+                if let Ok(s) = std::str::from_utf8(str_data) {
+                    if is_valid_layer_name(s) && !seen.contains(s) {
+                        tracing::debug!("FlatBuffers string at {:#x}: {}", i, s);
+                        names.push(s.to_string());
+                        seen.insert(s.to_string());
+                    }
+                }
+            }
+        }
+    }
 
+    if !names.is_empty() {
+        return names;
+    }
+
+    // Fallback: linear scan for null-terminated ASCII strings
     let mut i = 0;
     while i + 20 < data.len() {
-        // Look for potential string markers
         if data[i].is_ascii_alphabetic() {
             if let Some(name) = try_extract_string_at(data, i) {
                 if is_valid_layer_name(&name) && !seen.contains(&name) {

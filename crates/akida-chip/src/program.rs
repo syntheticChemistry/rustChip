@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! FlatBuffer program format for Akida models.
 //!
 //! Reverse-engineered from `.fbz` model files and C++ engine symbols.

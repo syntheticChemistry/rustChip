@@ -91,3 +91,7 @@ path = "src/bin/bench_exp004_hybrid_tanh.rs"
 [[bin]]
 name = "run_experiments"         # Unified runner: Exp 002 + 003 + 004 pass/fail report
 path = "src/bin/run_experiments.rs"
+
+[[bin]]
+name = "probe_sram"              # SRAM probe: direct memory read/write for all NP SRAM
+path = "src/bin/probe_sram.rs"

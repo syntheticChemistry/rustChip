@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Inference latency benchmark — single-sample and batched.
 //!
 //! Reference measurements (AKD1000, PCIe x1 Gen2, Feb 2026):
@@ -24,8 +26,8 @@ use std::time::Instant;
 use tracing_subscriber::EnvFilter;
 
 const DEFAULT_ITERATIONS: usize = 1000;
-const INPUT_DIM: usize = 50;   // Physics feature vector (plaquette, Polyakov, etc.)
-const OUTPUT_DIM: usize = 1;   // ESN readout (β_c prediction, phase classifier, etc.)
+const INPUT_DIM: usize = 50; // Physics feature vector (plaquette, Polyakov, etc.)
+const OUTPUT_DIM: usize = 1; // ESN readout (β_c prediction, phase classifier, etc.)
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -85,7 +87,10 @@ fn main() -> Result<()> {
     // Batch amortization sweep (Discovery 3)
     println!("Batch amortization (PCIe round-trip amortization)");
     println!("-------------------------------------------------");
-    println!("  {:>7}  {:>12}  {:>10}  {:>12}", "batch", "µs/sample", "samples/s", "vs batch=1");
+    println!(
+        "  {:>7}  {:>12}  {:>10}  {:>12}",
+        "batch", "µs/sample", "samples/s", "vs batch=1"
+    );
 
     let batch_1_lat = run_batch(&mut device, 1, INPUT_DIM, OUTPUT_DIM, 200)?;
 

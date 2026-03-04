@@ -56,7 +56,11 @@ Allocation (hypothetical — not directly measured):
   Status SRAM:               ~1 MB   (32-bit wide, stores control/status)
 
 Allocation varies by model. The SDK's SramAllocator manages this.
-Direct SRAM access via BAR1 (16 GB window) is possible but not yet validated.
+
+**SRAM access confirmed:** `SramAccessor` and `VfioBackend::map_bar1()` provide direct
+BAR1 read/write. `probe_sram` (probe/scan/test modes) and `NpuBackend::read_sram()`
+enable runtime exploration. Register probe results from `SramAccessor` (BAR0) feed
+`Capabilities::from_bar0()` for NP count, SRAM config, and mesh topology.
 ```
 
 ---

@@ -19,6 +19,7 @@
   Rust application
     → akida_driver::InferenceExecutor (this repo)
       → VfioBackend (pure Rust ioctls + mmap)
+        → SramAccessor (BAR0/BAR1 direct read/write — full on-chip memory access)
         → /dev/vfio/{group} (Linux VFIO — no C in data path)
           → IOMMU → PCIe → AKD1000
 
@@ -38,6 +39,11 @@ Future (Phase F+):
 The current Phase D VFIO stack has no C in the inference data path after
 kernel-level IOMMU setup. VFIO ioctls (`libc::ioctl`) are the one remaining
 non-Rust surface — and that's a language boundary, not a safety issue.
+
+Phase D now includes the **SRAM layer**: `VfioBackend::map_bar1()` exposes BAR1
+(NP mesh / SRAM window) for direct read/write. The driver has full access to
+all on-chip memory — BAR0 registers and BAR1 SRAM — enabling model verification,
+direct weight mutation, and zero-DMA online learning.
 
 Phase E converts the kernel module to Rust. After that: the entire stack from
 application to device interrupt handler is Rust.

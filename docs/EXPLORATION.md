@@ -260,6 +260,22 @@ SDK doesn't advertise.
 **Novelty**: Very high
 **Value**: Unknown (could be transformative or a dead end)
 
+### 3D. SRAM-Enabled Research Directions (rustChip)
+
+With `SramAccessor` and `probe_sram`, BAR1 SRAM is now directly readable
+and writable. New research directions enabled:
+
+| Direction | Approach | Value |
+|-----------|----------|-------|
+| **Weight inspection** | Read back NP SRAM after load; compare against expected weights from `.fbz` | Model load verification, debugging quantization |
+| **Online learning verification** | Read SRAM before/after STDP updates; confirm hardware learning state | Validate on-chip learning beyond SDK |
+| **PUF via SRAM noise** | Power-cycle SRAM regions; measure startup bit patterns; extract device fingerprint | Device attestation, anti-cloning |
+| **Multi-tenant isolation** | Load tenant A, read SRAM; load tenant B, read SRAM; verify no cross-tenant bleed | Security for shared NPU deployment |
+
+These directions exploit the `NpuBackend::read_sram()`, `verify_load()`, and
+`LoadVerification` capabilities added to rustChip. `bench_exp002_tenancy`
+Phase 2 with `--hw` flag exercises SRAM isolation verification.
+
 ---
 
 ## Tier 4: Cross-Substrate Orchestration

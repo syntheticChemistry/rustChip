@@ -318,6 +318,8 @@ The hybrid executor makes this property measurable.
 
 ## Implementation Status (Feb 27, 2026)
 
+`HybridEsn` exists and is complete. SRAM weight verification is now possible via `verify_load()` on the `NpuBackend` trait.
+
 | Component | Status |
 |-----------|--------|
 | SoftwareBackend (tanh + true recurrence) | ✅ implemented (`software.rs`) |

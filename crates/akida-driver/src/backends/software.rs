@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Software (Virtual NPU) backend
 //!
@@ -57,9 +57,9 @@ pub struct SoftwareBackend {
     leak_rate: f32,
 
     // Weight matrices (row-major, f32)
-    w_in: Vec<f32>,   // [reservoir_size × input_size]
-    w_res: Vec<f32>,  // [reservoir_size × reservoir_size]
-    w_out: Vec<f32>,  // [output_size × reservoir_size]
+    w_in: Vec<f32>,  // [reservoir_size × input_size]
+    w_res: Vec<f32>, // [reservoir_size × reservoir_size]
+    w_out: Vec<f32>, // [output_size × reservoir_size]
 
     /// Current reservoir state (f32, matches hardware precision)
     state: Vec<f32>,
@@ -86,11 +86,16 @@ impl SoftwareBackend {
             chip_version: ChipVersion::Akd1000,
             npu_count: reservoir_size as u32,
             memory_mb: 0,
-            pcie: PcieConfig { generation: 0, lanes: 0, bandwidth_gbps: 0.0, speed_gts: 0.0 },
+            pcie: PcieConfig {
+                generation: 0,
+                lanes: 0,
+                bandwidth_gbps: 0.0,
+                speed_gts: 0.0,
+            },
             power_mw: None,
             temperature_c: None,
-            weight_mutation: WeightMutationSupport::Full,  // SW supports instant swap
-            mesh:  None,
+            weight_mutation: WeightMutationSupport::Full, // SW supports instant swap
+            mesh: None,
             clock_mode: None,
             batch: None,
         };
@@ -99,7 +104,7 @@ impl SoftwareBackend {
             input_size,
             output_size,
             leak_rate: 0.3,
-            w_in:  vec![0.0f32; reservoir_size * input_size],
+            w_in: vec![0.0f32; reservoir_size * input_size],
             w_res: vec![0.0f32; reservoir_size * reservoir_size],
             w_out: vec![0.0f32; output_size * reservoir_size],
             state: vec![0.0f32; reservoir_size],
@@ -133,26 +138,34 @@ impl SoftwareBackend {
     ///
     /// Returns error if weight dimensions don't match configured architecture.
     pub fn load_weights(&mut self, w_in: &[f32], w_res: &[f32], w_out: &[f32]) -> Result<()> {
-        let expected_in  = self.reservoir_size * self.input_size;
+        let expected_in = self.reservoir_size * self.input_size;
         let expected_res = self.reservoir_size * self.reservoir_size;
-        let expected_out = self.output_size   * self.reservoir_size;
+        let expected_out = self.output_size * self.reservoir_size;
 
         if w_in.len() != expected_in {
             return Err(AkidaError::capability_query_failed(format!(
                 "w_in size mismatch: got {}, expected {}×{}={}",
-                w_in.len(), self.reservoir_size, self.input_size, expected_in
+                w_in.len(),
+                self.reservoir_size,
+                self.input_size,
+                expected_in
             )));
         }
         if w_res.len() != expected_res {
             return Err(AkidaError::capability_query_failed(format!(
                 "w_res size mismatch: got {}, expected {}²={}",
-                w_res.len(), self.reservoir_size, expected_res
+                w_res.len(),
+                self.reservoir_size,
+                expected_res
             )));
         }
         if w_out.len() != expected_out {
             return Err(AkidaError::capability_query_failed(format!(
                 "w_out size mismatch: got {}, expected {}×{}={}",
-                w_out.len(), self.output_size, self.reservoir_size, expected_out
+                w_out.len(),
+                self.output_size,
+                self.reservoir_size,
+                expected_out
             )));
         }
 
@@ -181,7 +194,8 @@ impl SoftwareBackend {
         if w_out.len() != expected {
             return Err(AkidaError::capability_query_failed(format!(
                 "w_out swap size mismatch: got {}, expected {}",
-                w_out.len(), expected
+                w_out.len(),
+                expected
             )));
         }
         self.w_out.copy_from_slice(w_out);
@@ -196,7 +210,10 @@ impl SoftwareBackend {
         if w_out.len() != expected {
             return Err(AkidaError::capability_query_failed(format!(
                 "w_out reconfigure size mismatch: got {}, expected {}×{}={}",
-                w_out.len(), new_output_size, self.reservoir_size, expected
+                w_out.len(),
+                new_output_size,
+                self.reservoir_size,
+                expected
             )));
         }
         self.output_size = new_output_size;
@@ -299,22 +316,33 @@ impl NpuBackend for SoftwareBackend {
         // [RS×IS × 4 bytes w_in][RS×RS × 4 bytes w_res][OS×RS × 4 bytes w_out]
         if model.len() < 16 {
             return Err(AkidaError::capability_query_failed(
-                "SoftwareBackend model blob too short (need header + weights)".to_string()
+                "SoftwareBackend model blob too short (need header + weights)".to_string(),
             ));
         }
-        let rs = u32::from_le_bytes(model[0..4].try_into().unwrap()) as usize;
-        let is = u32::from_le_bytes(model[4..8].try_into().unwrap()) as usize;
-        let os = u32::from_le_bytes(model[8..12].try_into().unwrap()) as usize;
-        let lr = f32::from_le_bytes(model[12..16].try_into().unwrap());
+        let to_u32 = |s: &[u8]| -> Result<u32> {
+            let arr: [u8; 4] = s
+                .try_into()
+                .map_err(|_| AkidaError::capability_query_failed("invalid model header"))?;
+            Ok(u32::from_le_bytes(arr))
+        };
+        let rs = to_u32(&model[0..4])? as usize;
+        let is = to_u32(&model[4..8])? as usize;
+        let os = to_u32(&model[8..12])? as usize;
+        let lr = f32::from_le_bytes(
+            model[12..16]
+                .try_into()
+                .map_err(|_| AkidaError::capability_query_failed("invalid leak rate bytes"))?,
+        );
 
-        let n_in  = rs * is;
+        let n_in = rs * is;
         let n_res = rs * rs;
         let n_out = os * rs;
         let expected = 16 + (n_in + n_res + n_out) * 4;
 
         if model.len() < expected {
             return Err(AkidaError::capability_query_failed(format!(
-                "SoftwareBackend model blob too short: {} < {expected}", model.len()
+                "SoftwareBackend model blob too short: {} < {expected}",
+                model.len()
             )));
         }
 
@@ -322,24 +350,24 @@ impl NpuBackend for SoftwareBackend {
         self.input_size = is;
         self.output_size = os;
         self.leak_rate = lr;
-        self.w_in  = vec![0.0; n_in];
+        self.w_in = vec![0.0; n_in];
         self.w_res = vec![0.0; n_res];
         self.w_out = vec![0.0; n_out];
         self.state = vec![0.0; rs];
         self.caps.npu_count = rs as u32;
 
+        let parse_f32_weights = |data: &[u8], out: &mut [f32]| {
+            for (i, chunk) in data.chunks_exact(4).enumerate() {
+                // chunks_exact(4) guarantees exactly 4 bytes per chunk
+                out[i] = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            }
+        };
         let base = 16usize;
-        for (i, chunk) in model[base..base + n_in * 4].chunks_exact(4).enumerate() {
-            self.w_in[i] = f32::from_le_bytes(chunk.try_into().unwrap());
-        }
+        parse_f32_weights(&model[base..base + n_in * 4], &mut self.w_in);
         let base = base + n_in * 4;
-        for (i, chunk) in model[base..base + n_res * 4].chunks_exact(4).enumerate() {
-            self.w_res[i] = f32::from_le_bytes(chunk.try_into().unwrap());
-        }
+        parse_f32_weights(&model[base..base + n_res * 4], &mut self.w_res);
         let base = base + n_res * 4;
-        for (i, chunk) in model[base..base + n_out * 4].chunks_exact(4).enumerate() {
-            self.w_out[i] = f32::from_le_bytes(chunk.try_into().unwrap());
-        }
+        parse_f32_weights(&model[base..base + n_out * 4], &mut self.w_out);
 
         self.reservoir_loaded = true;
         let h = ModelHandle::new(self.next_handle);
@@ -355,7 +383,8 @@ impl NpuBackend for SoftwareBackend {
         if is == 0 || w_in.len() != rs * is || w_res.len() != rs * rs {
             return Err(AkidaError::capability_query_failed(format!(
                 "load_reservoir: w_in={} w_res={} for RS={rs}",
-                w_in.len(), w_res.len()
+                w_in.len(),
+                w_res.len()
             )));
         }
         self.input_size = is;
@@ -369,7 +398,7 @@ impl NpuBackend for SoftwareBackend {
     fn infer(&mut self, input: &[f32]) -> Result<Vec<f32>> {
         if !self.reservoir_loaded {
             return Err(AkidaError::capability_query_failed(
-                "SoftwareBackend: no weights loaded; call load_weights() first".to_string()
+                "SoftwareBackend: no weights loaded; call load_weights() first".to_string(),
             ));
         }
         // Single-step inference: treat input as one timestep
@@ -409,9 +438,15 @@ pub fn pack_software_model(
     blob.extend_from_slice(&(input_size as u32).to_le_bytes());
     blob.extend_from_slice(&(output_size as u32).to_le_bytes());
     blob.extend_from_slice(&leak_rate.to_le_bytes());
-    for &w in w_in  { blob.extend_from_slice(&w.to_le_bytes()); }
-    for &w in w_res { blob.extend_from_slice(&w.to_le_bytes()); }
-    for &w in w_out { blob.extend_from_slice(&w.to_le_bytes()); }
+    for &w in w_in {
+        blob.extend_from_slice(&w.to_le_bytes());
+    }
+    for &w in w_res {
+        blob.extend_from_slice(&w.to_le_bytes());
+    }
+    for &w in w_out {
+        blob.extend_from_slice(&w.to_le_bytes());
+    }
     blob
 }
 
@@ -424,7 +459,7 @@ mod tests {
         // w_in = zeros (no input effect)
         // w_res = zeros (no recurrence)
         // w_out = ones (sum of state)
-        let w_in  = vec![0.0f32; rs * is];
+        let w_in = vec![0.0f32; rs * is];
         let w_res = vec![0.0f32; rs * rs];
         let w_out = vec![1.0f32 / rs as f32; os * rs]; // mean readout
         b.load_weights(&w_in, &w_res, &w_out).unwrap();
@@ -466,7 +501,7 @@ mod tests {
     fn readout_swap_doubles_output() {
         let rs = 5;
         let mut b = SoftwareBackend::new(rs, 2, 1);
-        let w_in  = vec![1.0f32; rs * 2];
+        let w_in = vec![1.0f32; rs * 2];
         let w_res = vec![0.0f32; rs * rs];
         let w_out_1 = vec![0.1f32; rs];
         let w_out_2 = vec![0.2f32; rs]; // double
@@ -484,10 +519,12 @@ mod tests {
 
     #[test]
     fn pack_and_load_model_roundtrip() {
-        let rs = 8; let is = 3; let os = 2;
-        let w_in:  Vec<f32> = (0..rs*is).map(|i| i as f32 * 0.01).collect();
-        let w_res: Vec<f32> = (0..rs*rs).map(|i| i as f32 * 0.001).collect();
-        let w_out: Vec<f32> = (0..os*rs).map(|i| i as f32 * 0.1).collect();
+        let rs = 8;
+        let is = 3;
+        let os = 2;
+        let w_in: Vec<f32> = (0..rs * is).map(|i| i as f32 * 0.01).collect();
+        let w_res: Vec<f32> = (0..rs * rs).map(|i| i as f32 * 0.001).collect();
+        let w_out: Vec<f32> = (0..os * rs).map(|i| i as f32 * 0.1).collect();
         let blob = pack_software_model(rs, is, os, 0.3, &w_in, &w_res, &w_out);
 
         let mut b = SoftwareBackend::new(rs, is, os);

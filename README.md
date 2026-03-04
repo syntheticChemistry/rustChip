@@ -30,11 +30,18 @@ The AKD1000 was used in production physics simulation — 5,978 live hardware ca
 rustChip/
 │
 ├── crates/                     Rust source — the primary deliverable
-│   ├── akida-chip/             silicon model: register map, NP mesh, BAR layout (zero deps)
-│   ├── akida-driver/           full driver: VFIO primary, kernel fallback, DMA, inference
-│   │   └── src/hybrid.rs       HybridEsn: substrate-agnostic ESN executor (tanh + hardware)
-│   ├── akida-models/           FlatBuffer model parser + program_external() injection
-│   ├── akida-bench/            benchmark suite: 10 BEYOND_SDK discoveries + experiments
+│   ├── akida-chip/             silicon model: register map, NP mesh, BAR layout, SRAM model
+│   │   └── src/sram.rs         BAR1 address layout, per-NP SRAM offsets, probe points
+│   ├── akida-driver/           full driver: VFIO, kernel, userspace, software, SRAM access
+│   │   ├── src/hybrid.rs       HybridEsn: substrate-agnostic ESN executor (tanh + hardware)
+│   │   ├── src/sram.rs         SramAccessor: BAR0 register dump + BAR1 read/write/probe
+│   │   ├── src/tenancy.rs      MultiTenantDevice: NP slot management + isolation verification
+│   │   ├── src/evolution.rs    NpuEvolver: online weight evolution via direct SRAM mutation
+│   │   ├── src/puf.rs          PUF fingerprinting via int4 quantization noise
+│   │   └── src/sentinel.rs     DriftMonitor: domain-shift detection + adaptive recovery
+│   ├── akida-models/           FlatBuffer parser, ProgramBuilder, model zoo
+│   │   └── src/builder.rs      ProgramBuilder: layer-by-layer FlatBuffer construction
+│   ├── akida-bench/            benchmark suite: 10 discoveries + experiments + SRAM probe
 │   └── akida-cli/              `akida` command-line tool
 │
 ├── specs/                      Technical specification — read before coding
@@ -108,10 +115,17 @@ cargo run --bin run_experiments
 cargo run --bin validate_all -- --sw  # software mode (always available)
 cargo run --bin validate_all          # hardware mode (/dev/akida0)
 
+# SRAM probe — direct memory access to all on-chip SRAM
+cargo run --bin probe_sram           # read-only probe of BAR0 registers + BAR1 SRAM
+cargo run --bin probe_sram -- scan   # deep scan: find all non-zero data in BAR1
+cargo run --bin probe_sram -- test   # write/readback test (destructive)
+
 # Individual benchmarks
 cargo run --bin bench_latency        # 54 µs / 18,500 Hz
 cargo run --bin bench_batch          # batch=8 sweet spot
-cargo run --bin bench_exp002_tenancy # multi-tenancy: 7-system NP packing
+cargo run --bin bench_bar            # BAR layout + BAR0 MMIO register probe
+cargo run --bin bench_exp002_tenancy # multi-tenancy: 7-system NP packing (Phase 1)
+cargo run --bin bench_exp002_tenancy -- --hw  # Phase 2: SRAM isolation verification
 cargo run --bin bench_exp004_hybrid_tanh  # hybrid tanh: Approach B validation
 ```
 
@@ -133,6 +147,47 @@ VFIO provides full DMA, IOMMU isolation, works on any kernel version.
 
 ---
 
+## SRAM access
+
+rustChip provides direct read/write access to all on-chip SRAM via two independent paths:
+
+**Userspace path** — `SramAccessor` (BAR0 register dump + BAR1 memory-mapped access via sysfs):
+```rust
+use akida_driver::sram::SramAccessor;
+
+let mut sram = SramAccessor::open("0000:a1:00.0")?;
+let device_id = sram.read_register(0x0)?;             // BAR0 register
+let weights = sram.read_bar1(np_offset, 4096)?;        // BAR1 SRAM
+sram.write_bar1(np_offset, &new_weights)?;             // direct weight mutation
+let results = sram.probe_bar1(&probe_offsets)?;         // multi-point probe
+```
+
+**VFIO path** — `VfioBackend` BAR1 mapping for DMA-capable SRAM access:
+```rust
+backend.map_bar1()?;
+let value = backend.read_sram_u32(offset)?;
+backend.write_sram_u32(offset, 0xDEAD_BEEF)?;
+```
+
+**Runtime capability discovery** — `Capabilities::from_bar0()` reads NP count, SRAM size,
+and mesh topology directly from BAR0 registers, replacing hardcoded assumptions:
+```rust
+use akida_driver::capabilities::Capabilities;
+
+let caps = Capabilities::from_bar0("0000:a1:00.0")?;
+println!("NPs: {}, SRAM per NP: {} KB", caps.np_count, caps.sram_per_np_kb);
+```
+
+**NpuBackend SRAM methods** — every backend exposes model load verification,
+direct weight mutation, and raw SRAM reads:
+```rust
+let verification = backend.verify_load(&model_bytes)?;   // readback check
+backend.mutate_weights(offset, &patch)?;                  // zero-DMA weight update
+let data = backend.read_sram(offset, length)?;            // raw SRAM read
+```
+
+---
+
 ## Measured results (AKD1000, PCIe x1 Gen2, Feb 2026)
 
 | Metric | Measured |
@@ -144,6 +199,7 @@ VFIO provides full DMA, IOMMU isolation, works on any kernel version.
 | Online weight swap (`set_variable()`) | 86 µs |
 | Production calls (Exp 022, 24 h lattice QCD) | 5,978 |
 | Multi-system NP packing (7 systems) | 814 / 1,000 NPs |
+| SRAM BAR0 register probe (80 registers) | < 1 ms |
 | Temporal PUF entropy | 6.34 bits |
 
 ---
@@ -212,7 +268,7 @@ Full analysis: [`whitePaper/explorations/TANH_CONSTRAINT.md`](whitePaper/explora
 Phase A: Python SDK → Rust FFI wrapper          ✅ done (external)
 Phase B: C++ Engine → Rust FFI to libakida.so   ✅ done (external)
 Phase C: Direct ioctl/mmap on /dev/akida0        ✅ done (Feb 26, 2026)
-Phase D: Pure Rust VFIO driver (this repo)       ✅ active — primary path
+Phase D: Pure Rust VFIO driver (this repo)       ✅ active — SRAM access complete
 Phase E: Rust akida_pcie kernel module           🔲 queued
 ```
 
@@ -244,6 +300,13 @@ Start here:
 2. [`whitePaper/outreach/akida/TECHNICAL_BRIEF.md`](whitePaper/outreach/akida/TECHNICAL_BRIEF.md) — what the hardware actually does
 3. [`baseCamp/systems/README.md`](baseCamp/systems/README.md) — what more it can do
 4. [`whitePaper/explorations/TANH_CONSTRAINT.md`](whitePaper/explorations/TANH_CONSTRAINT.md) — the one thing to fix in hardware
+
+## For hardware testers (SRAM access)
+
+Want to read/write all on-chip memory? Start here:
+1. [`docs/SRAM_ACCESS_GUIDE.md`](docs/SRAM_ACCESS_GUIDE.md) — complete step-by-step guide
+2. `cargo run --bin probe_sram` — immediate SRAM diagnostics (no setup)
+3. [`specs/INTEGRATION_GUIDE.md`](specs/INTEGRATION_GUIDE.md) — programmatic SRAM API
 
 ---
 

@@ -51,6 +51,8 @@ If threshold = 2^51 - 1 (max): activation never clamps → linear pass-through
 **Step 3:** Inject via `program_external()`.
 **Step 4:** Run inference. Measure: does output match `W·x` (linear) or `relu(W·x)`?
 
+**SRAM readback verification:** `NpuBackend::verify_load()` and `read_sram()` can confirm that weights loaded via the FlatBuffer path are correctly written to on-chip SRAM. After `program_external()` + `set_variable()`, call `verify_load(&expected_program_data)` to validate load integrity. This supports debugging Approach A threshold/weight placement.
+
 ```rust
 // In metalForge/npu/ or bench binary:
 fn build_linear_fc_program(input_dim: usize, reservoir_dim: usize) -> Vec<u8> {

@@ -1,7 +1,7 @@
 # rustChip Specifications
 
-**Last Updated**: February 27, 2026
-**Status**: Phase D active — VFIO driver functional, `cargo check` clean
+**Last Updated**: March 4, 2026
+**Status**: Phase D active — SRAM access complete, `cargo check` clean
 **Crates**: akida-chip 0.1.0, akida-driver 0.1.0, akida-models 0.1.0,
            akida-bench 0.1.0, akida-cli 0.1.0
 
@@ -11,11 +11,13 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| akida-chip | ✅ Clean | Silicon model — zero deps, zero errors |
-| akida-driver (VFIO) | ✅ Functional | Full DMA, IOVA mapping, BAR0 MMIO, power measurement |
+| akida-chip | ✅ Clean | Silicon model + SRAM layout — zero deps, zero errors |
+| akida-driver (VFIO) | ✅ Functional | Full DMA, BAR0 MMIO, BAR1 SRAM R/W, power measurement |
+| akida-driver (SRAM) | ✅ Complete | SramAccessor, Capabilities::from_bar0, NpuBackend SRAM methods |
 | akida-driver (kernel) | ✅ Fallback | /dev/akida* when C module loaded |
-| akida-models | ✅ Skeleton | FlatBuffer parser, program_external() injection path |
-| akida-bench | ✅ 10 bins | All 10 BEYOND_SDK discoveries + production benchmarks |
+| akida-driver (systems) | ✅ Scaffolded | tenancy, evolution, PUF, sentinel modules |
+| akida-models | ✅ Functional | FlatBuffer parser, ProgramBuilder, model zoo |
+| akida-bench | ✅ 12 bins | 10 BEYOND_SDK + probe_sram + Phase 2 benchmarks |
 | akida-cli | ✅ Functional | enumerate, info, bind-vfio, unbind-vfio, iommu-group |
 | docs/ | ✅ Complete | BEYOND_SDK, HARDWARE, TECHNICAL_BRIEF, BENCHMARK_DATASHEET |
 | DEPRECATED.md | ✅ | C kernel module clearly marked, migration path documented |
@@ -40,8 +42,11 @@
 - Pure Rust, standalone software stack for AKD1000 / AKD1500 hardware
 - Primary backend: VFIO (no kernel module required)
 - Fallback backend: C kernel module (when already installed)
-- FlatBuffer model format parser and injection
-- Benchmark suite reproducing all 10 BEYOND_SDK hardware discoveries
+- Direct SRAM read/write via BAR0 registers and BAR1 memory mapping
+- Runtime capability discovery from BAR0 (no sysfs attributes needed)
+- FlatBuffer model format parser, ProgramBuilder, and injection
+- Novel system scaffolds: multi-tenancy, evolution, PUF, drift monitor
+- Benchmark suite reproducing all 10 BEYOND_SDK hardware discoveries + SRAM probe
 - Command-line tool for hardware enumeration, info, and VFIO management
 
 ### rustChip IS NOT:
@@ -87,19 +92,24 @@ for upstream reference. We don't erase history; we evolve past it.
 ## Reading Order
 
 **AI developer (orient first, then build)**:
-1. `AI_CONTEXT.md` — conventions, crate graph, extension patterns
-2. `SILICON_SPEC.md` — what the hardware actually is
-3. `DRIVER_SPEC.md` — how the driver is structured
+1. `AI_CONTEXT.md` — conventions, crate graph, SRAM patterns, extension patterns
+2. `SILICON_SPEC.md` — what the hardware actually is (including SRAM types)
+3. `DRIVER_SPEC.md` — how the driver is structured (including SRAM access layer)
 
 **Engineer evaluating this for integration**:
 1. This README (5 min)
-2. `INTEGRATION_GUIDE.md` — how to use this in your project
+2. `INTEGRATION_GUIDE.md` — how to use this in your project (incl. SRAM access)
 3. `../BEYOND_SDK.md` — the 10 hardware discoveries that justify the approach
 
 **Researcher studying the silicon**:
-1. `SILICON_SPEC.md` — register map and NP mesh
+1. `SILICON_SPEC.md` — register map, NP mesh, SRAM types
 2. `../docs/HARDWARE.md` — deep-dive architecture
 3. `../docs/BEYOND_SDK.md` — discovery methodology
+
+**Hardware tester wanting SRAM access**:
+1. `../docs/SRAM_ACCESS_GUIDE.md` — complete step-by-step guide
+2. `INTEGRATION_GUIDE.md` — programmatic API + SRAM diagnostics
+3. `DRIVER_SPEC.md` §8 — SRAM access layer architecture
 
 ---
 

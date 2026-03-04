@@ -2,7 +2,24 @@
 
 **Date:** February 27, 2026
 **Status:** Rust model infrastructure active; physics models validated;
-            vision/audio/edge models: analysis complete, conversion tooling queued
+            vision/audio/edge models: analysis complete, conversion tooling queued;
+            systems scaffolded into Rust modules with SRAM access infrastructure
+
+---
+
+## Scaffolded Systems (Rust Modules)
+
+The following systems are scaffolded as Rust modules with SRAM access infrastructure:
+
+| Module | Path | Key types |
+|--------|------|-----------|
+| Program builder | [`crates/akida-models/src/builder.rs`](../crates/akida-models/src/builder.rs) | `ProgramBuilder`, `LayerSpec`, `QuantConfig`, `EsnProgramBuilder` |
+| Multi-tenancy | [`crates/akida-driver/src/tenancy.rs`](../crates/akida-driver/src/tenancy.rs) | `MultiTenantDevice`, `ProgramSlot`, `load_at_offset()`, `verify_isolation()` |
+| Online evolution | [`crates/akida-driver/src/evolution.rs`](../crates/akida-driver/src/evolution.rs) | `NpuEvolver`, `WeightPatch`, `EvolutionConfig`, `FitnessEvaluator` |
+| Temporal PUF | [`crates/akida-driver/src/puf.rs`](../crates/akida-driver/src/puf.rs) | `PufSignature`, `PufConfig`, `measure_puf()`, `puf_entropy()`, `puf_hamming_distance()` |
+| Adaptive sentinel | [`crates/akida-driver/src/sentinel.rs`](../crates/akida-driver/src/sentinel.rs) | `DriftMonitor`, `DriftAlert`, `DriftConfig`, `AdaptiveRecovery` |
+
+**SRAM infrastructure:** `SramAccessor` provides direct BAR0/BAR1 SRAM read/write. `NpuBackend` trait has `verify_load()`, `mutate_weights()`, `read_sram()`. `Capabilities::from_bar0()` reads NP count, SRAM size, mesh topology from BAR0 registers. `probe_sram` binary provides interactive SRAM diagnostics.
 
 ---
 

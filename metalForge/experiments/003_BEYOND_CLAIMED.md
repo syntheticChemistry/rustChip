@@ -2,6 +2,7 @@
 
 **Status:** PLANNED
 **Hardware:** AKD1000 (BC.00.000.002), `/dev/akida0`
+**SRAM tooling:** `probe_sram` (probe/scan/test modes) enables E3.x experiments that require BAR1 probing — direct read/write to NP mesh SRAM via `SramAccessor` and `VfioBackend::map_bar1()`.
 **Estimated time:** 8–10 hours (can be split across days)
 **Key question:** For each BrainChip claimed use case, how much more can we
 extract from the same hardware?

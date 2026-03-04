@@ -157,7 +157,23 @@ Weights are DMA'd to NP SRAM separately from the program binary.
 
 ---
 
-## 9. SRAM Weight Budget
+## 9. probe_sram Benchmark (Placeholder)
+
+The `probe_sram` binary (probe/scan/test modes) provides direct BAR0/BAR1
+access for SRAM exploration and load verification.
+
+| Mode | Metric | Placeholder / Notes |
+|------|--------|---------------------|
+| **probe** | BAR0 register probe time (80 registers) | < 1 ms |
+| **scan** | BAR1 region scan throughput | Depends on BAR1 size; to be measured |
+| **test** | Read/write round-trip verification | To be measured |
+
+Full benchmark data pending hardware runs. Use `probe_sram --help` for mode
+options.
+
+---
+
+## 10. SRAM Weight Budget
 
 | Model | Parameters | At int4 | Fits in 8 MB SRAM |
 |-------|----------:|---------:|:-----------------:|
@@ -171,7 +187,7 @@ Weights are DMA'd to NP SRAM separately from the program binary.
 
 ---
 
-## 10. Determinism and Reproducibility
+## 11. Determinism and Reproducibility
 
 | Property | Result |
 |----------|--------|
@@ -182,7 +198,7 @@ Weights are DMA'd to NP SRAM separately from the program binary.
 
 ---
 
-## 11. Comparison: NPU vs GPU for ESN Inference
+## 12. Comparison: NPU vs GPU for ESN Inference
 
 | Metric | AKD1000 (NPU) | RTX 3090 (GPU) | Titan V (GPU) |
 |--------|---------------:|---------------:|--------------:|
@@ -199,9 +215,9 @@ microwatt power. No scheduling conflict. No memory pressure. No thermal impact.
 
 ---
 
-## 12. Three-Substrate Production Results
+## 13. Three-Substrate Production Results
 
-### 12.1 Experiment 015 (Validation Run — 3 Strategic β Points)
+### 13.1 Experiment 015 (Validation Run — 3 Strategic β Points)
 
 Full pipeline: RTX 3090 (DF64 HMC) + AKD1000 (ESN steering) + Titan V (f64 oracle)
 
@@ -217,7 +233,7 @@ Full pipeline: RTX 3090 (DF64 HMC) + AKD1000 (ESN steering) + Titan V (f64 oracl
 | Measurements per β point | 200 | 500 | **2.5× more data** |
 | GPU power draw | 368-374 W | 338-340 W | **8% lower** |
 
-### 12.2 Experiment 022 (Production Run — 10 NPU-Steered β Points, Live AKD1000)
+### 13.2 Experiment 022 (Production Run — 10 NPU-Steered β Points, Live AKD1000)
 
 Full pipeline with live NPU hardware via PCIe. Cross-run ESN bootstrapping from prior
 trajectories. Completed February 27, 2026.
@@ -244,7 +260,7 @@ interesting deconfinement transition region.
 
 ---
 
-## 13. AKD1500 Projected Performance (from Datasheet)
+## 14. AKD1500 Projected Performance (from Datasheet)
 
 Source: AKD1500 Datasheet v1.2, June 2025. No hardware measurements yet —
 these are projections based on documented specs and our AKD1000 measurements.
@@ -296,13 +312,13 @@ embedded deployment without a PCIe host. For our ESN inference payload
 
 ---
 
-## 14. wetSpring Live Hardware Results (Pure Rust, February 26, 2026)
+## 15. wetSpring Live Hardware Results (Pure Rust, February 26, 2026)
 
 **Driver:** ToadStool `akida-driver` 0.1.0 — **pure Rust, zero SDK/vendor dependency**
 **Host:** Intel i9-12900K, 64 GB DDR5, Pop!\_OS 22.04
 **Device:** AKD1000 @ `0000:08:00.0` (80 NPUs, 10 MB SRAM, PCIe Gen2 x1)
 
-### 14.1 ESN Classifier Inference (Exp194)
+### 15.1 ESN Classifier Inference (Exp194)
 
 | Classifier | CPU Sim Acc | NPU Live Acc | Throughput | Energy/Infer |
 |------------|:----------:|:----------:|:----------:|:------------:|
@@ -310,7 +326,7 @@ embedded deployment without a PCIe host. For our ESN inference payload
 | Bloom Sentinel (4-class) | 25.0% | 25.3% | 18,773 Hz | 1.4 µJ |
 | Disorder (3-class) | 32.9% | 31.6% | 18,626 Hz | 1.4 µJ |
 
-### 14.2 DMA Performance
+### 15.2 DMA Performance
 
 | Operation | Measured |
 |-----------|---------|
@@ -321,7 +337,7 @@ embedded deployment without a PCIe host. For our ESN inference payload
 | Batch inference (8-wide) | 20,754 infer/sec |
 | Readout switch (weight mutation) | 28 µs avg |
 
-### 14.3 Novel Capabilities (Exp195)
+### 15.3 Novel Capabilities (Exp195)
 
 | Experiment | Result |
 |------------|--------|
@@ -331,7 +347,7 @@ embedded deployment without a PCIe host. For our ESN inference payload
 | Anderson Disorder Sweep | 8 levels (W=0 to 30), response characterized per disorder strength |
 | Cross-Reservoir Crosstalk | 12,765 switch/sec, no state bleed between classifiers |
 
-### 14.4 Edge Power Budget
+### 15.4 Edge Power Budget
 
 | Scenario | Power | Energy/Day | Coin-Cell CR2032 |
 |----------|-------|-----------|:----------------:|
@@ -339,7 +355,7 @@ embedded deployment without a PCIe host. For our ESN inference payload
 | 10 Hz sensor node | 30 mW | 1.25 J | 400 days |
 | Continuous (18K Hz) | 30 mW | 2,592 J | N/A (wired) |
 
-### 14.5 Significance: Phase C Sovereign Driver
+### 15.5 Significance: Phase C Sovereign Driver
 
 These measurements were taken entirely through the ToadStool `akida-driver`
 pure Rust crate — no Python SDK, no C++ engine, no vendor code in the path.

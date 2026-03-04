@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! BAR0 register map for AKD1000.
 //!
 //! These offsets were established by two methods:
@@ -66,9 +68,9 @@ pub const SRAM_BAR_ADDR: usize = 0x141C;
 /// eDMA write channel 0 control (inferred from DW eDMA spec).
 pub const EDMA_WRITE_CH0_CTL: usize = 0x0200;
 /// eDMA read channel 0 control.
-pub const EDMA_READ_CH0_CTL:  usize = 0x0300;
+pub const EDMA_READ_CH0_CTL: usize = 0x0300;
 /// eDMA interrupt status.
-pub const EDMA_INT_STATUS:    usize = 0x0010_0010;
+pub const EDMA_INT_STATUS: usize = 0x0010_0010;
 
 // ── Model load ───────────────────────────────────────────────────────────────
 
@@ -84,21 +86,21 @@ pub const MODEL_LOAD: usize = 0x010C;
 // ── Inference ────────────────────────────────────────────────────────────────
 
 /// Input buffer address (low 32 bits).
-pub const INPUT_ADDR_LO:  usize = 0x0200;
+pub const INPUT_ADDR_LO: usize = 0x0200;
 /// Input buffer address (high 32 bits).
-pub const INPUT_ADDR_HI:  usize = 0x0204;
+pub const INPUT_ADDR_HI: usize = 0x0204;
 /// Input buffer size.
-pub const INPUT_SIZE:     usize = 0x0208;
+pub const INPUT_SIZE: usize = 0x0208;
 /// Output buffer address (low 32 bits).
 pub const OUTPUT_ADDR_LO: usize = 0x0300;
 /// Output buffer address (high 32 bits).
 pub const OUTPUT_ADDR_HI: usize = 0x0304;
 /// Output buffer size.
-pub const OUTPUT_SIZE:    usize = 0x0308;
+pub const OUTPUT_SIZE: usize = 0x0308;
 /// Inference trigger — write 1 to start.
-pub const INFER_START:    usize = 0x0400;
+pub const INFER_START: usize = 0x0400;
 /// Inference completion status.
-pub const INFER_STATUS:   usize = 0x0404;
+pub const INFER_STATUS: usize = 0x0404;
 
 // ── Interrupts ───────────────────────────────────────────────────────────────
 
@@ -118,11 +120,11 @@ pub const NP_CONFIG_STRIDE: usize = 0x100;
 
 pub mod status {
     /// Device ready to accept commands.
-    pub const READY:        u32 = 1 << 0;
+    pub const READY: u32 = 1 << 0;
     /// Device currently processing.
-    pub const BUSY:         u32 = 1 << 1;
+    pub const BUSY: u32 = 1 << 1;
     /// Error during last operation.
-    pub const ERROR:        u32 = 1 << 2;
+    pub const ERROR: u32 = 1 << 2;
     /// Model successfully loaded.
     pub const MODEL_LOADED: u32 = 1 << 3;
 }
@@ -131,9 +133,9 @@ pub mod status {
 
 pub mod control {
     /// Soft reset.
-    pub const RESET:      u32 = 1 << 0;
+    pub const RESET: u32 = 1 << 0;
     /// Enable device.
-    pub const ENABLE:     u32 = 1 << 1;
+    pub const ENABLE: u32 = 1 << 1;
     /// Power-save mode (Economy clock).
     pub const POWER_SAVE: u32 = 1 << 2;
 }
@@ -143,8 +145,8 @@ pub mod control {
 
 pub mod clock {
     pub const PERFORMANCE: u32 = 0;
-    pub const ECONOMY:     u32 = 1; // 19% slower, 18% less power
-    pub const LOW_POWER:   u32 = 2; // 9.3× slower, 27% less power
+    pub const ECONOMY: u32 = 1; // 19% slower, 18% less power
+    pub const LOW_POWER: u32 = 2; // 9.3× slower, 27% less power
 }
 
 #[cfg(test)]

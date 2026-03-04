@@ -57,9 +57,40 @@ BAR  Address         Size     Type                    Purpose
 
 **Discovery 8 (BEYOND_SDK.md):** BAR1 exposes 16 GB decode range — far larger
 than the 8 MB physical SRAM spec. With 78 NPs, each could address ~200 MB.
-BAR1 first 64 KB reads as all-zeros (sparse NP-mapped layout).
 
-The VFIO driver maps BAR0 for all control; BAR1 exploration is ongoing.
+**BAR1 SRAM access is now confirmed**: `SramAccessor` and `VfioBackend::map_bar1()`
+provide direct read/write to BAR1 SRAM. Layout is dynamically discovered from
+BAR0 registers (NP_COUNT at 0x10C0, SRAM regions at 0x1410/0x1418/0x141C).
+`probe_sram` binary provides interactive diagnostics.
+
+### BAR1 Per-NP Stride Layout
+
+```
+BAR1 offset = np_index × stride + region_offset
+
+Per-NP SRAM regions:
+  Filter SRAM    — 64-bit entries, stores convolution/FC weights
+  Threshold SRAM — 51-bit entries, stores activation thresholds + parameters
+  Event SRAM     — 32-bit entries, stores spike event queues
+  Status SRAM    — 32-bit entries, stores NP operational state
+```
+
+### SRAM Type Details
+
+| SRAM Type | Entry Width | Purpose | Access |
+|-----------|-------------|---------|--------|
+| Filter | 64-bit | Convolution/FC weight storage | R/W via BAR1 |
+| Threshold | 51-bit | Activation thresholds, neuron parameters | R/W via BAR1 |
+| Event | 32-bit | Spike event queues, inter-NP routing | R/W via BAR1 |
+| Status | 32-bit | NP operational state, error flags | R/W via BAR1 |
+
+### SRAM Region Registers (BAR0)
+
+| Offset | Name | Value | Interpretation |
+|--------|------|-------|----------------|
+| `0x1410` | `SRAM_REGION_0` | `0x2000` | Region 0 config (8 KB boundary) — confirmed |
+| `0x1418` | `SRAM_REGION_1` | `0x8000` | Region 1 config (32 KB boundary) — confirmed |
+| `0x141C` | `SRAM_REGION_2` | varies | Region 2 config — inferred |
 
 ---
 

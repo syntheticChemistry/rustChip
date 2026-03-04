@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! VFIO bind/unbind helper — moves AKD1000 between pcie_dw_edma and vfio-pci drivers.
 //!
 //! The pure-Rust userspace driver requires the device to be bound to `vfio-pci`
@@ -39,8 +39,8 @@
 
 const AKIDA_VENDOR_ID: u16 = 0x1e7f;
 const AKIDA_DEVICE_ID: u16 = 0x1000;
-const VFIO_PCI_DRIVER:  &str = "vfio-pci";
-const KERNEL_DRIVER:    &str = "pcie_dw_edma";
+const VFIO_PCI_DRIVER: &str = "vfio-pci";
+const KERNEL_DRIVER: &str = "pcie_dw_edma";
 
 fn find_akida_pci_address() -> Option<String> {
     // Scan /sys/bus/pci/devices/ for 1e7f:1000
@@ -59,7 +59,9 @@ fn find_akida_pci_address() -> Option<String> {
             let v = u16::from_str_radix(vendor.trim().trim_start_matches("0x"), 16).unwrap_or(0);
             let d = u16::from_str_radix(device.trim().trim_start_matches("0x"), 16).unwrap_or(0);
             if v == AKIDA_VENDOR_ID && d == AKIDA_DEVICE_ID {
-                return entry.path().file_name()
+                return entry
+                    .path()
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .map(String::from);
             }
@@ -71,7 +73,9 @@ fn find_akida_pci_address() -> Option<String> {
 fn cmd_status() {
     match find_akida_pci_address() {
         None => {
-            println!("AKD1000 not found (vendor={AKIDA_VENDOR_ID:04x} device={AKIDA_DEVICE_ID:04x})");
+            println!(
+                "AKD1000 not found (vendor={AKIDA_VENDOR_ID:04x} device={AKIDA_DEVICE_ID:04x})"
+            );
             println!("Check: lspci -d 1e7f:1000");
         }
         Some(addr) => {
@@ -131,9 +135,9 @@ fn main() {
 
     match cmd {
         "status" => cmd_status(),
-        "bind"   => cmd_bind(),
+        "bind" => cmd_bind(),
         "unbind" => cmd_unbind(),
-        other    => {
+        other => {
             eprintln!("Unknown command: {other}");
             eprintln!("Usage: vfio_bind [status|bind|unbind]");
             std::process::exit(1);

@@ -15,7 +15,7 @@ sovereign Rust access — from Python wrapper to Rust kernel module.
 Phase A: Python SDK → Rust FFI wrapper       [external, not in this repo]
 Phase B: C++ Engine → Rust FFI (libakida.so) [external, not in this repo]
 Phase C: Direct ioctl/mmap on /dev/akida0    ✅ complete (Feb 26, 2026)
-Phase D: Pure Rust VFIO driver               ✅ active (this repo, primary path)
+Phase D: Pure Rust VFIO driver               ✅ active (SRAM access complete)
 Phase E: Rust akida_pcie kernel module        🔲 queued
 ```
 
@@ -62,7 +62,7 @@ Read/write syscalls drive DMA transfers. MMIO via `/dev/mem` for register access
 
 ## Phase D — Pure Rust VFIO Driver
 
-**Status**: ✅ Active — this repository, primary backend
+**Status**: ✅ Active — this repository, primary backend. SRAM access complete.
 **What it is**: Linux VFIO/IOMMU provides userspace PCIe device access.
 No kernel module in the data path. Pure Rust from `open("/dev/vfio/N")` onward.
 
@@ -71,17 +71,34 @@ No kernel module in the data path. Pure Rust from `open("/dev/vfio/N")` onward.
   - Container, group, device management
   - DMA buffer lifecycle (alloc → mlock → MAP_DMA → use → UNMAP_DMA → free)
   - BAR0 MMIO via `mmap()` on VFIO region
+  - **BAR1 SRAM mapping** via `map_bar1()` — direct read/write to all on-chip SRAM
   - Register polling loop with yield for inference completion
   - Inference, model load, reservoir load, power measurement
+- `crates/akida-driver/src/sram.rs` — `SramAccessor` for userspace BAR0/BAR1 access
 - `crates/akida-driver/src/mmio.rs` — BAR memory mapping
+- `crates/akida-driver/src/capabilities.rs` — `from_bar0()` runtime discovery
+- `crates/akida-driver/src/backend.rs` — `NpuBackend` SRAM methods
+- `crates/akida-driver/src/tenancy.rs` — multi-tenant NP slot management
+- `crates/akida-driver/src/evolution.rs` — online weight evolution
+- `crates/akida-driver/src/puf.rs` — hardware PUF fingerprinting
+- `crates/akida-driver/src/sentinel.rs` — domain drift detection
 - `crates/akida-cli/src/main.rs` — `bind-vfio` and `unbind-vfio` subcommands
+
+**Phase D.5 — SRAM Infrastructure (complete)**:
+- `SramAccessor`: userspace BAR0 register dump + BAR1 SRAM read/write/probe
+- `VfioBackend::map_bar1()`: VFIO-backed BAR1 SRAM access
+- `Capabilities::from_bar0()`: runtime NP count, SRAM size, mesh topology
+- `NpuBackend::verify_load()`: model integrity via SRAM readback
+- `NpuBackend::mutate_weights()`: zero-DMA direct weight patches
+- `NpuBackend::read_sram()`: raw SRAM reads for diagnostics
+- `probe_sram` binary: 3-mode SRAM diagnostic tool
+- `bench_exp002_tenancy --hw`: Phase 2 SRAM isolation verification
 
 **Setup**: One-time per machine (IOMMU enable + vfio-pci bind). After that:
 no root, no kernel module, no Python.
 
 **Known gaps**:
 - IRQ-based completion (currently polling) — `VFIO_DEVICE_SET_IRQS` ready to use
-- BAR1 exploration (NP mesh window direct access)
 - Scatter-gather DMA for large payloads
 - MSI-X interrupt vectors
 

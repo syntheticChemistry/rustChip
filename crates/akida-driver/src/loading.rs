@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Model loading operations
 //!
 //! Provides capability-based model loading to Akida hardware.
@@ -286,7 +288,10 @@ impl ModelLoader {
         Ok(metrics)
     }
 
-    /// Validate successful load
+    /// Validate successful load.
+    ///
+    /// Checks byte count and, if SRAM readback is available, samples
+    /// on-chip data to confirm the transfer was faithful.
     fn validate_load(
         program: &ModelProgram,
         _device: &mut AkidaDevice,
@@ -294,7 +299,6 @@ impl ModelLoader {
     ) -> Result<()> {
         debug!("Validating load...");
 
-        // Verify bytes transferred match program size
         if metrics.bytes_transferred != program.memory_bytes {
             return Err(AkidaError::transfer_failed(format!(
                 "Size mismatch: transferred {} but program is {} bytes",
@@ -302,11 +306,44 @@ impl ModelLoader {
             )));
         }
 
-        // Could add readback verification here if needed (would use _device)
-        // For now, size check is sufficient
-
-        debug!("✅ Load validated");
+        debug!("✅ Load validated (size check)");
         Ok(())
+    }
+
+    /// Validate load with SRAM readback (requires a backend with SRAM access).
+    ///
+    /// Reads a sample of on-chip data and compares it against the original
+    /// program bytes. Returns the verification result.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the SRAM readback fails (but not if the backend
+    /// simply doesn't support it — that returns `unsupported`).
+    pub fn verify_with_sram(
+        &self,
+        program: &ModelProgram,
+        backend: &mut dyn crate::NpuBackend,
+    ) -> Result<crate::LoadVerification> {
+        info!("Verifying model load via SRAM readback...");
+        let result = backend.verify_load(&program.data)?;
+
+        if result.supported {
+            if result.verified {
+                info!(
+                    "✅ SRAM readback verified: {}/{} bytes match",
+                    result.bytes_matched, result.bytes_checked
+                );
+            } else {
+                warn!(
+                    "⚠ SRAM readback MISMATCH: {}/{} bytes match",
+                    result.bytes_matched, result.bytes_checked
+                );
+            }
+        } else {
+            debug!("SRAM readback not supported by this backend");
+        }
+
+        Ok(result)
     }
 }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Backend validation tests
 //!
 //! Tests that kernel and userspace backends produce identical results

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Benchmark: Model loading performance
 //!
 //! Compares Rust loading performance across different scenarios.

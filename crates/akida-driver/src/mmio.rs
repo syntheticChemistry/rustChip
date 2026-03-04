@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Memory-Mapped I/O for Akida NPU
 //!
 //! Provides safe abstractions for accessing Akida hardware registers.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Runtime device discovery
 //!
 //! Discovers Akida devices at runtime by scanning `/dev/akida*` and PCIe sysfs.

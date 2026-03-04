@@ -76,6 +76,11 @@ cargo run --bin enumerate
 cargo run --bin bench_dma
 cargo run --bin bench_latency
 
+# BAR exploration (SramAccessor, BAR0/BAR1 direct access)
+cargo run --bin probe_sram              # probe: BAR0 register dump + BAR1 probe
+cargo run --bin probe_sram -- scan      # scan: find non-zero data in BAR1
+cargo run --bin probe_sram -- test      # test: write/readback (destructive)
+
 # Full BEYOND_SDK reproduction suite
 cargo run --bin bench_channels
 cargo run --bin bench_fc_depth
@@ -86,6 +91,9 @@ cargo run --bin bench_weight_mut
 cargo run --bin bench_bar
 
 # Compare against reference values in experiments/001_BASELINE_CHARACTERIZATION.md
+
+# Experiment 002 Phase 2 (hardware SRAM isolation verification)
+cargo run --bin bench_exp002_tenancy -- --hw
 ```
 
 ---
@@ -95,3 +103,4 @@ cargo run --bin bench_bar
 | Experiment | Date | Description | Status |
 |------------|------|-------------|--------|
 | [001](experiments/001_BASELINE_CHARACTERIZATION.md) | Feb 27, 2026 | Baseline characterization: DMA, latency, channels, batch, clock modes | ✅ |
+| [002](experiments/002_MULTI_TENANCY.md) | — | Multi-tenancy: 7 systems on one AKD1000. Phase 1 ✅. Phase 2 runnable with `--hw` (SRAM isolation probe) | Phase 2 ready |

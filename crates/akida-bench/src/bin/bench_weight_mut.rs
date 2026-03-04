@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Weight mutation benchmark — Discovery 6 from BEYOND_SDK.md.
 //!
 //! "set_variable() updates weights without reprogram (~14 ms overhead)"
@@ -29,8 +31,8 @@ fn main() -> Result<()> {
     let mut device = manager.open_first()?;
 
     // Model: 8→64→1 (small, representative of weight mutation test)
-    let input = vec![0u8; 8 * 4];    // 8 float features
-    let mut output = vec![0u8; 4];   // 1 float output
+    let input = vec![0u8; 8 * 4]; // 8 float features
+    let mut output = vec![0u8; 4]; // 1 float output
 
     // Warmup
     for _ in 0..5 {
@@ -62,8 +64,16 @@ fn main() -> Result<()> {
 
     println!("Results");
     println!("-------");
-    println!("  Forward only          : {:.0} µs  ({:.0} Hz)", forward_us, 1e6 / forward_us);
-    println!("  Forward + weight DMA  : {:.0} µs  ({:.0} Hz)", with_update_us, 1e6 / with_update_us);
+    println!(
+        "  Forward only          : {:.0} µs  ({:.0} Hz)",
+        forward_us,
+        1e6 / forward_us
+    );
+    println!(
+        "  Forward + weight DMA  : {:.0} µs  ({:.0} Hz)",
+        with_update_us,
+        1e6 / with_update_us
+    );
     println!("  Weight update overhead: {:.1} ms", update_overhead_ms);
     println!();
     println!("Reference: ~13 ms overhead per set_variable() call  (Feb 2026)");

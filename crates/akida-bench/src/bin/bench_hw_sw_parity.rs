@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! bench_hw_sw_parity — Hardware NPU vs Software NPU: direct numerical comparison
 //!
 //! Runs identical inputs through both backends and quantifies:
@@ -35,7 +37,9 @@ impl Xoshiro {
             seed.rotate_right(5),
         ];
         let mut rng = Self { s };
-        for _ in 0..20 { let _ = rng.next_u64(); }
+        for _ in 0..20 {
+            let _ = rng.next_u64();
+        }
         rng
     }
 
@@ -77,35 +81,56 @@ impl Xoshiro {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Activation {
     Tanh,
-    BoundedRelu,   // [0, 1] — matches AKD1000 hardware
+    BoundedRelu, // [0, 1] — matches AKD1000 hardware
     Relu,
 }
 
 /// CPU f64 ESN — the reference implementation
 struct EsnF64 {
-    input_dim:      usize,
-    reservoir_dim:  usize,
-    output_dim:     usize,
-    w_in:   Vec<f64>,
-    w_res:  Vec<f64>,
-    w_out:  Vec<f64>,
-    state:  Vec<f64>,
-    leak:   f64,
+    input_dim: usize,
+    reservoir_dim: usize,
+    output_dim: usize,
+    w_in: Vec<f64>,
+    w_res: Vec<f64>,
+    w_out: Vec<f64>,
+    state: Vec<f64>,
+    leak: f64,
     activation: Activation,
 }
 
 impl EsnF64 {
-    fn new(input_dim: usize, reservoir_dim: usize, output_dim: usize,
-           activation: Activation, seed: u64) -> Self {
+    fn new(
+        input_dim: usize,
+        reservoir_dim: usize,
+        output_dim: usize,
+        activation: Activation,
+        seed: u64,
+    ) -> Self {
         let mut rng = Xoshiro::new(seed);
         let sparsity = 0.1f64;
-        let w_in  = rng.gen_f64(input_dim * reservoir_dim);
+        let w_in = rng.gen_f64(input_dim * reservoir_dim);
         let w_res = (0..reservoir_dim * reservoir_dim)
-            .map(|_| if rng.next_f64().abs() < sparsity { rng.next_f64() * 0.5 } else { 0.0 })
+            .map(|_| {
+                if rng.next_f64().abs() < sparsity {
+                    rng.next_f64() * 0.5
+                } else {
+                    0.0
+                }
+            })
             .collect();
         let w_out = rng.gen_f64(output_dim * reservoir_dim);
         let state = vec![0.0f64; reservoir_dim];
-        Self { input_dim, reservoir_dim, output_dim, w_in, w_res, w_out, state, leak: 0.3, activation }
+        Self {
+            input_dim,
+            reservoir_dim,
+            output_dim,
+            w_in,
+            w_res,
+            w_out,
+            state,
+            leak: 0.3,
+            activation,
+        }
     }
 
     fn step(&mut self, input: &[f64]) -> Vec<f64> {
@@ -114,8 +139,12 @@ impl EsnF64 {
         let alpha = self.leak;
         let mut pre = vec![0.0f64; rs];
         for i in 0..rs {
-            for j in 0..is { pre[i] += self.w_in[i * is + j] * input[j]; }
-            for j in 0..rs { pre[i] += self.w_res[i * rs + j] * self.state[j]; }
+            for j in 0..is {
+                pre[i] += self.w_in[i * is + j] * input[j];
+            }
+            for j in 0..rs {
+                pre[i] += self.w_res[i * rs + j] * self.state[j];
+            }
         }
         for i in 0..rs {
             let activated = match self.activation {
@@ -126,39 +155,46 @@ impl EsnF64 {
             self.state[i] = (1.0 - alpha) * self.state[i] + alpha * activated;
         }
         let os = self.output_dim;
-        (0..os).map(|i| {
-            self.w_out[i * rs..(i + 1) * rs].iter().zip(self.state.iter())
-                .map(|(w, s)| w * s).sum()
-        }).collect()
+        (0..os)
+            .map(|i| {
+                self.w_out[i * rs..(i + 1) * rs]
+                    .iter()
+                    .zip(self.state.iter())
+                    .map(|(w, s)| w * s)
+                    .sum()
+            })
+            .collect()
     }
 
-    fn reset(&mut self) { self.state.fill(0.0); }
+    fn reset(&mut self) {
+        self.state.fill(0.0);
+    }
 }
 
 /// CPU f32 ESN — mirrors SoftwareBackend (tanh by default)
 struct EsnF32 {
-    input_dim:     usize,
+    input_dim: usize,
     reservoir_dim: usize,
-    output_dim:    usize,
-    w_in:  Vec<f32>,
+    output_dim: usize,
+    w_in: Vec<f32>,
     w_res: Vec<f32>,
     w_out: Vec<f32>,
     state: Vec<f32>,
-    leak:  f32,
+    leak: f32,
     activation: Activation,
 }
 
 impl EsnF32 {
     fn from_f64(f64_esn: &EsnF64, activation: Activation) -> Self {
         Self {
-            input_dim:     f64_esn.input_dim,
+            input_dim: f64_esn.input_dim,
             reservoir_dim: f64_esn.reservoir_dim,
-            output_dim:    f64_esn.output_dim,
-            w_in:  f64_esn.w_in.iter().map(|&x| x as f32).collect(),
+            output_dim: f64_esn.output_dim,
+            w_in: f64_esn.w_in.iter().map(|&x| x as f32).collect(),
             w_res: f64_esn.w_res.iter().map(|&x| x as f32).collect(),
             w_out: f64_esn.w_out.iter().map(|&x| x as f32).collect(),
             state: vec![0.0f32; f64_esn.reservoir_dim],
-            leak:  f64_esn.leak as f32,
+            leak: f64_esn.leak as f32,
             activation,
         }
     }
@@ -169,8 +205,12 @@ impl EsnF32 {
         let alpha = self.leak;
         let mut pre = vec![0.0f32; rs];
         for i in 0..rs {
-            for j in 0..is { pre[i] += self.w_in[i * is + j] * input[j]; }
-            for j in 0..rs { pre[i] += self.w_res[i * rs + j] * self.state[j]; }
+            for j in 0..is {
+                pre[i] += self.w_in[i * is + j] * input[j];
+            }
+            for j in 0..rs {
+                pre[i] += self.w_res[i * rs + j] * self.state[j];
+            }
         }
         for i in 0..rs {
             let activated = match self.activation {
@@ -181,23 +221,30 @@ impl EsnF32 {
             self.state[i] = (1.0 - alpha) * self.state[i] + alpha * activated;
         }
         let os = self.output_dim;
-        (0..os).map(|i| {
-            self.w_out[i * rs..(i + 1) * rs].iter().zip(self.state.iter())
-                .map(|(w, s)| w * s).sum()
-        }).collect()
+        (0..os)
+            .map(|i| {
+                self.w_out[i * rs..(i + 1) * rs]
+                    .iter()
+                    .zip(self.state.iter())
+                    .map(|(w, s)| w * s)
+                    .sum()
+            })
+            .collect()
     }
 
-    fn reset(&mut self) { self.state.fill(0.0); }
+    fn reset(&mut self) {
+        self.state.fill(0.0);
+    }
 }
 
 /// int4-quantized ESN — simulates AKD1000 hardware (bounded ReLU, int4 weights)
 struct EsnInt4 {
-    base: EsnF32,  // base model for readout
-    w_in_q:  Vec<i8>,   // quantized input weights  [-8, 7]
-    w_res_q: Vec<i8>,   // quantized reservoir weights
-    w_out_q: Vec<i8>,   // quantized readout weights
+    base: EsnF32,     // base model for readout
+    w_in_q: Vec<i8>,  // quantized input weights  [-8, 7]
+    w_res_q: Vec<i8>, // quantized reservoir weights
+    w_out_q: Vec<i8>, // quantized readout weights
     // Per-layer scale factors (max-abs normalization)
-    scale_in:  f32,
+    scale_in: f32,
     scale_res: f32,
     scale_out: f32,
 }
@@ -207,7 +254,8 @@ impl EsnInt4 {
         fn quantize(v: &[f32]) -> (Vec<i8>, f32) {
             let max_abs = v.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
             let scale = if max_abs > 0.0 { max_abs / 7.0 } else { 1.0 };
-            let q: Vec<i8> = v.iter()
+            let q: Vec<i8> = v
+                .iter()
                 .map(|&x| ((x / scale).round() as i32).clamp(-8, 7) as i8)
                 .collect();
             (q, scale)
@@ -226,49 +274,82 @@ impl EsnInt4 {
             w_out: w_out_q.iter().map(|&x| x as f32 * scale_out).collect(),
             state: vec![0.0f32; f32_esn.reservoir_dim],
             leak: f32_esn.leak,
-            activation: Activation::BoundedRelu,  // hardware constraint
+            activation: Activation::BoundedRelu, // hardware constraint
         };
 
-        Self { base, w_in_q, w_res_q, w_out_q, scale_in, scale_res, scale_out }
+        Self {
+            base,
+            w_in_q,
+            w_res_q,
+            w_out_q,
+            scale_in,
+            scale_res,
+            scale_out,
+        }
     }
 
     fn step(&mut self, input: &[f32]) -> Vec<f32> {
         self.base.step(input)
     }
 
-    fn reset(&mut self) { self.base.reset(); }
+    fn reset(&mut self) {
+        self.base.reset();
+    }
 
     fn quantization_snr(&self, f32_esn: &EsnF32) -> f32 {
-        let signal: f32 = f32_esn.w_in.iter().map(|x| x * x).sum::<f32>() / f32_esn.w_in.len() as f32;
-        let noise: f32 = f32_esn.w_in.iter().zip(self.base.w_in.iter())
+        let signal: f32 =
+            f32_esn.w_in.iter().map(|x| x * x).sum::<f32>() / f32_esn.w_in.len() as f32;
+        let noise: f32 = f32_esn
+            .w_in
+            .iter()
+            .zip(self.base.w_in.iter())
             .map(|(a, b)| (a - b).powi(2))
-            .sum::<f32>() / f32_esn.w_in.len() as f32;
-        if noise > 0.0 { 10.0 * (signal / noise).log10() } else { f32::INFINITY }
+            .sum::<f32>()
+            / f32_esn.w_in.len() as f32;
+        if noise > 0.0 {
+            10.0 * (signal / noise).log10()
+        } else {
+            f32::INFINITY
+        }
     }
 }
 
 // ── Comparison metrics ────────────────────────────────────────────────────────
 
 fn relative_error(a: &[f32], b: &[f32]) -> f32 {
-    let diffs: Vec<f32> = a.iter().zip(b.iter())
+    let diffs: Vec<f32> = a
+        .iter()
+        .zip(b.iter())
         .map(|(&x, &y)| (x - y).abs() / (x.abs().max(y.abs()).max(1e-8)))
         .collect();
     diffs.iter().sum::<f32>() / diffs.len() as f32
 }
 
 fn mse(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(&x, &y)| (x - y).powi(2)).sum::<f32>() / a.len() as f32
+    a.iter()
+        .zip(b.iter())
+        .map(|(&x, &y)| (x - y).powi(2))
+        .sum::<f32>()
+        / a.len() as f32
 }
 
 fn classification_agreement(a_seq: &[Vec<f32>], b_seq: &[Vec<f32>]) -> f32 {
-    let agree = a_seq.iter().zip(b_seq.iter())
+    let agree = a_seq
+        .iter()
+        .zip(b_seq.iter())
         .filter(|(a, b)| {
-            let a_class = a.iter().enumerate()
+            let a_class = a
+                .iter()
+                .enumerate()
                 .max_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-                .map(|(i, _)| i).unwrap_or(0);
-            let b_class = b.iter().enumerate()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let b_class = b
+                .iter()
+                .enumerate()
                 .max_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-                .map(|(i, _)| i).unwrap_or(0);
+                .map(|(i, _)| i)
+                .unwrap_or(0);
             a_class == b_class
         })
         .count();
@@ -279,7 +360,10 @@ fn classification_agreement(a_seq: &[Vec<f32>], b_seq: &[Vec<f32>]) -> f32 {
 
 fn task_throughput(reservoir_dim: usize, iters: usize) {
     println!("── Throughput Comparison ─────────────────────────────────────────────");
-    println!("  Reservoir size: {} NPs, {} iterations", reservoir_dim, iters);
+    println!(
+        "  Reservoir size: {} NPs, {} iterations",
+        reservoir_dim, iters
+    );
     println!();
 
     let input_dim = 50;
@@ -288,55 +372,91 @@ fn task_throughput(reservoir_dim: usize, iters: usize) {
         let mut rng = Xoshiro::new(42);
         (0..iters).map(|_| rng.gen_f32(input_dim)).collect()
     };
-    let inputs_f64: Vec<Vec<f64>> = inputs.iter()
+    let inputs_f64: Vec<Vec<f64>> = inputs
+        .iter()
         .map(|v| v.iter().map(|&x| x as f64).collect())
         .collect();
 
     // CPU f64 throughput
     let mut esn64 = EsnF64::new(input_dim, reservoir_dim, output_dim, Activation::Tanh, 1337);
     let start = Instant::now();
-    for inp in &inputs_f64 { let _ = esn64.step(inp); }
+    for inp in &inputs_f64 {
+        let _ = esn64.step(inp);
+    }
     let hz_f64 = iters as f64 / start.elapsed().as_secs_f64();
 
     // CPU f32 + tanh throughput
     let mut esn32_tanh = EsnF32::from_f64(&esn64, Activation::Tanh);
     let start = Instant::now();
-    for inp in &inputs { let _ = esn32_tanh.step(inp); }
+    for inp in &inputs {
+        let _ = esn32_tanh.step(inp);
+    }
     let hz_f32_tanh = iters as f64 / start.elapsed().as_secs_f64();
 
     // CPU f32 + bounded ReLU (hardware activation) throughput
     let mut esn32_relu = EsnF32::from_f64(&esn64, Activation::BoundedRelu);
     let start = Instant::now();
-    for inp in &inputs { let _ = esn32_relu.step(inp); }
+    for inp in &inputs {
+        let _ = esn32_relu.step(inp);
+    }
     let hz_f32_relu = iters as f64 / start.elapsed().as_secs_f64();
 
     // int4 quantized (hardware simulation) throughput
     let mut esn_int4 = EsnInt4::from_f32(&esn32_relu);
     let start = Instant::now();
-    for inp in &inputs { let _ = esn_int4.step(inp); }
+    for inp in &inputs {
+        let _ = esn_int4.step(inp);
+    }
     let hz_int4 = iters as f64 / start.elapsed().as_secs_f64();
 
-    println!("  {:35} {:>10}  {:>10}  {:>8}", "Backend", "Hz", "µs/call", "vs f64");
+    println!(
+        "  {:35} {:>10}  {:>10}  {:>8}",
+        "Backend", "Hz", "µs/call", "vs f64"
+    );
     println!("  {}", "─".repeat(70));
-    println!("  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
-             "CPU f64 + tanh (reference)", hz_f64, 1e6 / hz_f64, 1.0);
-    println!("  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
-             "CPU f32 + tanh (SoftwareBackend)", hz_f32_tanh, 1e6 / hz_f32_tanh,
-             hz_f32_tanh / hz_f64);
-    println!("  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
-             "CPU f32 + boundedReLU (HW sim)", hz_f32_relu, 1e6 / hz_f32_relu,
-             hz_f32_relu / hz_f64);
-    println!("  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
-             "CPU int4 + boundedReLU (HW quant sim)", hz_int4, 1e6 / hz_int4,
-             hz_int4 / hz_f64);
-    println!("  {:35} {:>10}  {:>10}  {:>7}",
-             "AKD1000 hardware (int4, batch=1)", "18,500 ✅", "54.0", "~46×");
-    println!("  {:35} {:>10}  {:>10}  {:>7}",
-             "AKD1000 (int4, batch=8 throughput)", "2,566 ✅", "390", "~6×");
+    println!(
+        "  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
+        "CPU f64 + tanh (reference)",
+        hz_f64,
+        1e6 / hz_f64,
+        1.0
+    );
+    println!(
+        "  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
+        "CPU f32 + tanh (SoftwareBackend)",
+        hz_f32_tanh,
+        1e6 / hz_f32_tanh,
+        hz_f32_tanh / hz_f64
+    );
+    println!(
+        "  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
+        "CPU f32 + boundedReLU (HW sim)",
+        hz_f32_relu,
+        1e6 / hz_f32_relu,
+        hz_f32_relu / hz_f64
+    );
+    println!(
+        "  {:35} {:>10.0}  {:>10.1}  {:>7.1}×",
+        "CPU int4 + boundedReLU (HW quant sim)",
+        hz_int4,
+        1e6 / hz_int4,
+        hz_int4 / hz_f64
+    );
+    println!(
+        "  {:35} {:>10}  {:>10}  {:>7}",
+        "AKD1000 hardware (int4, batch=1)", "18,500 ✅", "54.0", "~46×"
+    );
+    println!(
+        "  {:35} {:>10}  {:>10}  {:>7}",
+        "AKD1000 (int4, batch=8 throughput)", "2,566 ✅", "390", "~6×"
+    );
     println!();
     println!("  Energy (estimated at identical throughput):");
     println!("  {:35} {:>14}", "CPU f32 (whole CPU, ~35W)", "~44 mJ/inf");
-    println!("  {:35} {:>14}", "AKD1000 (Economy mode, 221mW)", "1.20 µJ/inf ✅");
+    println!(
+        "  {:35} {:>14}",
+        "AKD1000 (Economy mode, 221mW)", "1.20 µJ/inf ✅"
+    );
     println!("  {:35} {:>14}", "Ratio", "~36,600×");
 }
 
@@ -346,7 +466,7 @@ fn task_parity(reservoir_dim: usize, iters: usize) {
     println!();
 
     let input_dim = 50;
-    let output_dim = 2;  // binary classification task
+    let output_dim = 2; // binary classification task
     let mut rng = Xoshiro::new(0xc0ffee);
     let inputs: Vec<Vec<f32>> = (0..iters).map(|_| rng.gen_f32(input_dim)).collect();
 
@@ -381,39 +501,64 @@ fn task_parity(reservoir_dim: usize, iters: usize) {
     let flat_int4: Vec<f32> = outputs_int4.iter().flatten().copied().collect();
 
     println!("  Relative error vs f64+tanh reference:");
-    println!("  {:40} {:>10} {:>10} {:>10}",
-             "Comparison", "RelErr%", "MSE", "ClassAgree%");
+    println!(
+        "  {:40} {:>10} {:>10} {:>10}",
+        "Comparison", "RelErr%", "MSE", "ClassAgree%"
+    );
     println!("  {}", "─".repeat(72));
 
     let err_sw = relative_error(&flat32t, &flat64);
     let mse_sw = mse(&flat32t, &flat64);
     let agree_sw = classification_agreement(&outputs32t, &outputs64);
-    println!("  {:40} {:>10.2} {:>10.6} {:>10.1}",
-             "f32+tanh (SoftwareBackend) vs f64", err_sw * 100.0, mse_sw, agree_sw * 100.0);
+    println!(
+        "  {:40} {:>10.2} {:>10.6} {:>10.1}",
+        "f32+tanh (SoftwareBackend) vs f64",
+        err_sw * 100.0,
+        mse_sw,
+        agree_sw * 100.0
+    );
 
     let err_relu = relative_error(&flat32r, &flat64);
     let mse_relu = mse(&flat32r, &flat64);
     let agree_relu = classification_agreement(&outputs32r, &outputs64);
-    println!("  {:40} {:>10.2} {:>10.6} {:>10.1}",
-             "f32+boundedReLU (HW activation) vs f64", err_relu * 100.0, mse_relu, agree_relu * 100.0);
+    println!(
+        "  {:40} {:>10.2} {:>10.6} {:>10.1}",
+        "f32+boundedReLU (HW activation) vs f64",
+        err_relu * 100.0,
+        mse_relu,
+        agree_relu * 100.0
+    );
 
     let err_int4 = relative_error(&flat_int4, &flat64);
     let mse_int4 = mse(&flat_int4, &flat64);
     let agree_int4 = classification_agreement(&outputs_int4, &outputs64);
-    println!("  {:40} {:>10.2} {:>10.6} {:>10.1}",
-             "int4+boundedReLU (HW quantized) vs f64", err_int4 * 100.0, mse_int4, agree_int4 * 100.0);
+    println!(
+        "  {:40} {:>10.2} {:>10.6} {:>10.1}",
+        "int4+boundedReLU (HW quantized) vs f64",
+        err_int4 * 100.0,
+        mse_int4,
+        agree_int4 * 100.0
+    );
 
     println!();
-    println!("  Quantization SNR (int4 vs f32): {:.1} dB",
-             esn_int4.quantization_snr(&EsnF32::from_f64(&esn64, Activation::BoundedRelu)));
+    println!(
+        "  Quantization SNR (int4 vs f32): {:.1} dB",
+        esn_int4.quantization_snr(&EsnF32::from_f64(&esn64, Activation::BoundedRelu))
+    );
     println!();
     println!("  Key insight:");
-    println!("  - Activation gap (f32 tanh→relu): {:.1}% class agreement loss",
-             (agree_sw - agree_relu) * 100.0);
-    println!("  - Quantization gap (f32→int4):   {:.1}% class agreement loss",
-             (agree_relu - agree_int4) * 100.0);
-    println!("  - Total gap (random weights):     {:.1}%",
-             (agree_sw - agree_int4) * 100.0);
+    println!(
+        "  - Activation gap (f32 tanh→relu): {:.1}% class agreement loss",
+        (agree_sw - agree_relu) * 100.0
+    );
+    println!(
+        "  - Quantization gap (f32→int4):   {:.1}% class agreement loss",
+        (agree_relu - agree_int4) * 100.0
+    );
+    println!(
+        "  - Total gap (random weights):     {:.1}%",
+        (agree_sw - agree_int4) * 100.0
+    );
     println!();
     println!("  IMPORTANT: This uses RANDOMLY INITIALIZED weights for all substrates.");
     println!("  Random weights + boundedReLU = degenerate reservoir (near-chance accuracy).");
@@ -439,12 +584,16 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
     // Synthetic binary classification task with known ground truth
     let n_class_0 = iters / 2;
     let n_class_1 = iters - n_class_0;
-    let inputs: Vec<(Vec<f32>, bool)> = (0..iters).map(|i| {
-        let class = i < n_class_0;
-        let center = if class { 0.3f32 } else { -0.3f32 };
-        let inp: Vec<f32> = (0..input_dim).map(|_| center + rng.next_f32() * 0.4).collect();
-        (inp, class)
-    }).collect();
+    let inputs: Vec<(Vec<f32>, bool)> = (0..iters)
+        .map(|i| {
+            let class = i < n_class_0;
+            let center = if class { 0.3f32 } else { -0.3f32 };
+            let inp: Vec<f32> = (0..input_dim)
+                .map(|_| center + rng.next_f32() * 0.4)
+                .collect();
+            (inp, class)
+        })
+        .collect();
 
     // Train readout for each activation
     for (act_name, activation) in [
@@ -460,7 +609,10 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
 
         // Collect states (reservoir outputs)
         let mut states: Vec<Vec<f32>> = Vec::new();
-        let labels: Vec<f32> = inputs.iter().map(|(_, c)| if *c { 1.0 } else { -1.0 }).collect();
+        let labels: Vec<f32> = inputs
+            .iter()
+            .map(|(_, c)| if *c { 1.0 } else { -1.0 })
+            .collect();
 
         esn.reset();
         for (inp, _) in &inputs {
@@ -492,7 +644,9 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
         for (inp, class) in inputs.iter() {
             let out = esn.step(inp);
             let pred = out[0] > 0.0;
-            if pred == *class { correct += 1; }
+            if pred == *class {
+                correct += 1;
+            }
         }
         let accuracy = correct as f32 / inputs.len() as f32;
 
@@ -555,16 +709,15 @@ fn task_hybrid_training(reservoir_dim: usize, iters: usize) {
     // ── Simulated hybrid training ─────────────────────────────────────────────
     // Simulates: HW forward (54 µs) + SW backward (~50 µs) + set_variable (86 µs)
 
-    let hw_forward_us  = 54.0f64;    // measured ✅
-    let sw_backward_us = 50.0f64;    // estimated (128-dim readout gradient)
-    let set_variable_us = 86.0f64;   // measured ✅
+    let hw_forward_us = 54.0f64; // measured ✅
+    let sw_backward_us = 50.0f64; // estimated (128-dim readout gradient)
+    let set_variable_us = 86.0f64; // measured ✅
     let pcie_overhead_us = 650.0f64; // measured ✅ (full round-trip)
 
     // We apply the weight update every K steps (amortize set_variable overhead)
-    let update_freq = 8;  // update every 8 steps (amortizes 86 µs over 8 × forward)
+    let update_freq = 8; // update every 8 steps (amortizes 86 µs over 8 × forward)
 
-    let hybrid_us_per_step = hw_forward_us + sw_backward_us
-        + set_variable_us / update_freq as f64;
+    let hybrid_us_per_step = hw_forward_us + sw_backward_us + set_variable_us / update_freq as f64;
     let hybrid_hz = 1e6 / hybrid_us_per_step;
 
     // Also run actual software hybrid sim for the computation part
@@ -594,39 +747,61 @@ fn task_hybrid_training(reservoir_dim: usize, iters: usize) {
     let hybrid_sw_hz = iters as f64 / hybrid_sw_elapsed.as_secs_f64();
     hybrid_loss /= iters as f32;
 
-    println!("  {:40} {:>10} {:>12} {:>10}", "Training mode", "Steps/sec", "Loss", "Energy");
+    println!(
+        "  {:40} {:>10} {:>12} {:>10}",
+        "Training mode", "Steps/sec", "Loss", "Energy"
+    );
     println!("  {}", "─".repeat(75));
-    println!("  {:40} {:>10.0} {:>12.6} {:>10}",
-             "Pure SW (f32+tanh, gradient)", sw_hz, sw_loss, "~35 W");
-    println!("  {:40} {:>10.0} {:>12.6} {:>10}",
-             "Hybrid sim (SW compute only)", hybrid_sw_hz, hybrid_loss, "~35 W");
-    println!("  {:40} {:>10.0} {:>12} {:>10}",
-             "Hybrid HW (projected, HW forward)", hybrid_hz, "est.", "~270 mW");
-    println!("  {:40} {:>10} {:>12} {:>10}",
-             "Evolutionary (set_var, batch=8)", "136 ✅", "N/A", "~270 mW");
+    println!(
+        "  {:40} {:>10.0} {:>12.6} {:>10}",
+        "Pure SW (f32+tanh, gradient)", sw_hz, sw_loss, "~35 W"
+    );
+    println!(
+        "  {:40} {:>10.0} {:>12.6} {:>10}",
+        "Hybrid sim (SW compute only)", hybrid_sw_hz, hybrid_loss, "~35 W"
+    );
+    println!(
+        "  {:40} {:>10.0} {:>12} {:>10}",
+        "Hybrid HW (projected, HW forward)", hybrid_hz, "est.", "~270 mW"
+    );
+    println!(
+        "  {:40} {:>10} {:>12} {:>10}",
+        "Evolutionary (set_var, batch=8)", "136 ✅", "N/A", "~270 mW"
+    );
     println!();
     println!("  Hybrid training (HW forward + SW backward):");
     println!("    Projected Hz:  {:.0} steps/sec", hybrid_hz);
     println!("    vs pure SW:    {:.1}× faster", hybrid_hz / sw_hz);
-    println!("    vs evolution:  {:.1}× faster (but evolution needs no labels)", hybrid_hz / 136.0);
+    println!(
+        "    vs evolution:  {:.1}× faster (but evolution needs no labels)",
+        hybrid_hz / 136.0
+    );
     println!();
     println!("  Note: hybrid Hz is projected from measured HW latencies.");
-    println!("  Software component measured at {:.0} Hz (computation overhead only).",
-             hybrid_sw_hz);
+    println!(
+        "  Software component measured at {:.0} Hz (computation overhead only).",
+        hybrid_sw_hz
+    );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let use_hw  = args.iter().any(|a| a == "--hw");
+    let use_hw = args.iter().any(|a| a == "--hw");
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
-    let task = args.iter().find_map(|a| a.strip_prefix("--task="))
+    let task = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--task="))
         .unwrap_or("all");
-    let iters = args.iter().find_map(|a| a.strip_prefix("--iters="))
+    let iters = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--iters="))
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(2_000);
-    let reservoir = args.iter().find_map(|a| a.strip_prefix("--reservoir="))
+    let reservoir = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--reservoir="))
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(128);
 
@@ -646,9 +821,9 @@ fn main() -> Result<()> {
 
     match task {
         "throughput" => task_throughput(reservoir, iters),
-        "parity"     => task_parity(reservoir, iters),
+        "parity" => task_parity(reservoir, iters),
         "activation" => task_activation_comparison(reservoir, iters),
-        "training"   => task_hybrid_training(reservoir, iters),
+        "training" => task_hybrid_training(reservoir, iters),
         _ => {
             task_throughput(reservoir, iters);
             println!();

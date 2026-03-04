@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Kernel backend for NPU
 //!
 //! Wraps existing `AkidaDevice` to conform to `NpuBackend` trait.

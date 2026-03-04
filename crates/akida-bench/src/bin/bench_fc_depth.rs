@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! FC depth benchmark — Discovery 2 from BEYOND_SDK.md.
 //!
 //! "All FC layers merge into a single hardware pass via SkipDMA"
@@ -29,7 +31,10 @@ fn main() -> Result<()> {
     println!("Model: {INPUT_DIM}→{HIDDEN_DIM}→...→1  (InputConv + N FC layers)");
     println!("Verifies FC chain merging via SkipDMA.");
     println!();
-    println!("  {:>7}  {:>12}  {:>10}  {:>12}", "depth", "µs/infer", "Hz", "overhead");
+    println!(
+        "  {:>7}  {:>12}  {:>10}  {:>12}",
+        "depth", "µs/infer", "Hz", "overhead"
+    );
     println!("  {:-<7}  {:-<12}  {:-<10}  {:-<12}", "", "", "", "");
 
     let manager = akida_driver::DeviceManager::discover()?;
@@ -64,7 +69,10 @@ fn main() -> Result<()> {
 
         println!(
             "  {:>7}  {:>12.0}  {:>10.0}  {:>+11.0}µs",
-            depth, us, 1e6 / us, overhead_us
+            depth,
+            us,
+            1e6 / us,
+            overhead_us
         );
     }
 

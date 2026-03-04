@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Memory-mapped region abstraction
 //!
 //! Deep Debt Principles:
@@ -104,9 +106,8 @@ impl MmapRegion {
             )
             .map_err(|e| AkidaError::capability_query_failed(format!("mmap failed: {e}")))?;
 
-            // EVOLVED: NonNull::new + expect is safe; rustix returns non-null on Ok
             NonNull::new(addr.cast::<u8>())
-                .expect("rustix mmap returns non-null pointer on success")
+                .ok_or_else(|| AkidaError::capability_query_failed("mmap returned null pointer"))?
         };
 
         tracing::info!(

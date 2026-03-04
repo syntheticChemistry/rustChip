@@ -155,6 +155,12 @@ The chip handles simultaneous evolution + production inference — no mode switc
 
 ---
 
+## Rust Implementation
+
+`NpuEvolver` is scaffolded at [`crates/akida-driver/src/evolution.rs`](../../crates/akida-driver/src/evolution.rs), with `WeightPatch`, `EvolutionConfig`, and `FitnessEvaluator` trait. Uses `mutate_weights()` for zero-DMA weight updates.
+
+---
+
 ## Connection to wetSpring / hotSpring
 
 This system was extracted from wetSpring Exp 193–195 and is a core capability

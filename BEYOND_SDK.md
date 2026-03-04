@@ -27,7 +27,7 @@ both APIs give ~1:64 (hardware ratio). The real breakthrough was the double-floa
 | 5 | Max FC width ~hundreds | **Tested to 8192+ neurons** — all map to HW | Massive FC networks fit in 8MB SRAM |
 | 6 | No direct weight mutation | **set_variable() updates weights without reprogram** | Hot-swap weights at ~14ms overhead |
 | 7 | "30mW" power spec | **Board floor 900mW, chip compute below noise** | True chip power is unmeasurably small |
-| 8 | 8MB SRAM is the limit | **PCIe BAR1 exposes 16GB address space** | Full NP mesh may be memory-mapped |
+| 8 | 8MB SRAM is the limit | **PCIe BAR1 exposes 16GB address space** | Full NP mesh is memory-mapped — **direct R/W confirmed** |
 | 9 | Program is opaque | **FlatBuffer format with program_info + program_data** | Weights transmitted via DMA, not in program |
 | 10 | Simple inference engine | **C++ engine has SkipDMA, on-chip learning, register access** | Hardware capabilities far exceed SDK |
 
@@ -267,8 +267,15 @@ the first page suggest either sparse mapping or that data only appears at
 specific NP-mapped offsets after programming.
 
 **This is a significant finding**: The hardware has a MUCH larger address
-space than the 8MB SRAM spec suggests. Whether this is usable or just decoder
-range remains to be determined.
+space than the 8MB SRAM spec suggests. The decode range is sparse — physical
+SRAM is ~8 MB across 78 NPs, but the full range is accessible.
+
+**Update (Mar 2026)**: BAR1 SRAM is now **directly readable and writable** via
+rustChip's `SramAccessor` (sysfs mmap) and `VfioBackend::map_bar1()` (VFIO path).
+The `probe_sram` binary provides interactive diagnostics (probe, scan, test modes).
+Layout is auto-discovered from BAR0 registers: NP_COUNT (0x10C0), SRAM_REGION
+configs (0x1410/0x1418). This enables model load verification, direct weight
+mutation, and device fingerprinting — no SDK required.
 
 ---
 
@@ -390,8 +397,8 @@ These are real silicon constraints, not SDK limitations:
 7. **Attempt wider learning** — The C++ engine has learning registers beyond the
    1-bit SDK limit. Can we configure 4-bit learning via direct register writes?
 
-8. **BAR1 exploration** — Map the 16GB address space to understand if we can
-   read/write NP SRAM directly via memory-mapped I/O.
+8. **BAR1 exploration** — ✅ **Complete**. `SramAccessor` and `VfioBackend::map_bar1()`
+   provide full read/write access. `probe_sram` binary for interactive diagnostics.
 
 ### Phase 3: Cross-Substrate Integration (Month 2)
 

@@ -1,6 +1,6 @@
 # Experiment 002 — Multi-Tenancy: 7 Systems on One AKD1000
 
-**Status:** Phase 1 COMPLETE ✅ (software isolation model) | Phase 2 PENDING (hardware co-loading)
+**Status:** Phase 1 COMPLETE ✅ (software isolation model) | Phase 2 RUNNABLE ✅ (SRAM isolation probe via `--hw`)
 **Hardware:** AKD1000 (BC.00.000.002), `/dev/akida0`
 **Estimated time:** Phase 2: 4–6 hours
 **Key question:** Can multiple programs coexist at distinct NP offsets without
@@ -72,6 +72,31 @@ Note: Earlier docs had off-by-4 to off-by-44 hex address errors. Corrected in be
 cargo run --bin bench_exp002_tenancy
 cargo run --bin run_experiments -- --exp 002
 ```
+
+---
+
+## Phase 2: SRAM Isolation Probe (Hardware) ✅
+
+**Status:** Implemented. Run with `--hw` flag on a VFIO-bound AKD1000.
+
+```bash
+cargo run --bin bench_exp002_tenancy -- --hw
+```
+
+**What it does:**
+- Uses `SramAccessor` for BAR0/BAR1 direct access
+- Loads 2 programs at distinct NP offsets (0x0000 and 0x00B3)
+- Verifies SRAM isolation via `NpuBackend::verify_load()`: reads back SRAM after each load
+- Confirms NP enable bits and register state via `Capabilities::from_bar0()`
+- If isolation holds: output A unchanged after loading program B; SRAM readback matches expected
+
+**Interpreting results:**
+- `Address isolation: ✅ HOLDS` — load at B did not corrupt A's SRAM
+- `verify_load()` pass — SRAM readback matches program data; weights loaded correctly
+- NP enable bits — confirms per-group NP enable state from BAR0
+- On failure: `Address isolation: ❌ CORRUPTED` or `verify_load()` mismatch indicates SRAM overlap or threshold SRAM sharing
+
+**Prerequisites:** `--features vfio`, VFIO group bound, `/dev/akida0` accessible (or sysfs).
 
 ---
 

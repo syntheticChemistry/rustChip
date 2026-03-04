@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! `akida` — command-line interface for BrainChip Akida hardware.
 //!
 //! ```text
@@ -48,9 +50,7 @@ enum Cmd {
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .init();
 
     let cli = Cli::parse();
@@ -88,7 +88,10 @@ fn cmd_enumerate() -> Result<()> {
         println!("     NPUs  {}   SRAM  {} MB", c.npu_count, c.memory_mb);
 
         if let Some(m) = &c.mesh {
-            println!("     Mesh  {}×{}×{}  ({} functional)", m.x, m.y, m.z, m.functional_count);
+            println!(
+                "     Mesh  {}×{}×{}  ({} functional)",
+                m.x, m.y, m.z, m.functional_count
+            );
         }
         if let Some(clock) = c.clock_mode {
             println!("     Clock {:?}", clock);
@@ -127,14 +130,20 @@ fn cmd_info(device: &str) -> Result<()> {
     println!("Device       : {}", info.path().display());
     println!("PCIe address : {}", info.pcie_address());
     println!("Chip version : {:?}", c.chip_version);
-    println!("PCIe link    : Gen{} x{} ({:.1} GB/s)", c.pcie.generation, c.pcie.lanes, c.pcie.bandwidth_gbps);
+    println!(
+        "PCIe link    : Gen{} x{} ({:.1} GB/s)",
+        c.pcie.generation, c.pcie.lanes, c.pcie.bandwidth_gbps
+    );
     println!("NPUs         : {}", c.npu_count);
     println!("SRAM         : {} MB", c.memory_mb);
 
     if let Some(m) = &c.mesh {
         println!(
             "NP mesh      : {}×{}×{} ({} functional, {} disabled)",
-            m.x, m.y, m.z, m.functional_count,
+            m.x,
+            m.y,
+            m.z,
+            m.functional_count,
             (m.x as u32 * m.y as u32 * m.z as u32).saturating_sub(m.functional_count)
         );
     }
@@ -167,8 +176,14 @@ fn cmd_info(device: &str) -> Result<()> {
 fn cmd_bind_vfio(pcie_addr: &str) -> Result<()> {
     println!("Binding {} to vfio-pci ...", pcie_addr);
     akida_driver::vfio::bind_to_vfio(pcie_addr)?;
-    println!("Done. IOMMU group: {}", akida_driver::vfio::iommu_group(pcie_addr)?);
-    println!("Grant access:  sudo chown $USER /dev/vfio/{}", akida_driver::vfio::iommu_group(pcie_addr)?);
+    println!(
+        "Done. IOMMU group: {}",
+        akida_driver::vfio::iommu_group(pcie_addr)?
+    );
+    println!(
+        "Grant access:  sudo chown $USER /dev/vfio/{}",
+        akida_driver::vfio::iommu_group(pcie_addr)?
+    );
     Ok(())
 }
 

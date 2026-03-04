@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Enumerate all Akida devices on the system and print capabilities.
 //!
 //! Reference measurements (AKD1000, PCIe x1 Gen2):
@@ -59,10 +61,7 @@ fn main() -> Result<()> {
             println!("  Temperature  : {:.1} °C", temp);
         }
 
-        println!(
-            "  Weight mut.  : {:?}",
-            caps.weight_mutation
-        );
+        println!("  Weight mut.  : {:?}", caps.weight_mutation);
         println!();
     }
 

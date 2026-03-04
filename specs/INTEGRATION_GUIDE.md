@@ -206,7 +206,64 @@ After this one-time setup, `cargo run --bin enumerate` works without root.
 
 ---
 
-## 6. What this repo does NOT provide
+## 6. SRAM Access for Diagnostics and Online Learning
+
+rustChip provides direct read/write access to all on-chip SRAM. Use this for
+model verification, weight inspection, online learning, and hardware diagnostics.
+
+### Model load verification
+
+After loading a model, verify it was written correctly via SRAM readback:
+
+```rust
+use akida_driver::ModelLoader;
+
+let mut loader = ModelLoader::new(backend);
+loader.load(&model_bytes)?;
+
+// Verify: reads back SRAM and compares to expected bytes
+let verification = loader.verify_with_sram(&model_bytes)?;
+assert!(verification.matches);
+println!("Verified {} bytes, {} mismatches", verification.bytes_checked, verification.mismatches);
+```
+
+### Direct weight mutation (zero-DMA)
+
+For small weight patches (online learning, evolution), skip DMA entirely:
+
+```rust
+// Patch 256 bytes of weights at a specific SRAM offset
+backend.mutate_weights(weight_offset, &new_weight_bytes)?;
+
+// Run inference with the mutated weights — no reprogram needed
+let result = backend.infer(&input)?;
+```
+
+### Raw SRAM inspection
+
+```rust
+// Read 4 KB of SRAM at a specific offset
+let data = backend.read_sram(0x1000, 4096)?;
+
+// Or use SramAccessor for userspace access (no VFIO needed)
+let mut sram = SramAccessor::open("0000:a1:00.0")?;
+let bar0_regs = sram.read_register(0x0)?;        // device ID
+let np_data = sram.read_bar1(np_offset, 1024)?;   // NP SRAM contents
+```
+
+### probe_sram binary
+
+For interactive SRAM exploration:
+
+```bash
+cargo run --bin probe_sram              # BAR0 register dump + BAR1 probe
+cargo run --bin probe_sram -- scan      # find all non-zero data in BAR1
+cargo run --bin probe_sram -- test      # write/readback test (destructive)
+```
+
+---
+
+## 7. What this repo does NOT provide
 
 | Feature | Where to look |
 |---------|---------------|

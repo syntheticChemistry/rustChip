@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Backend abstraction for NPU drivers
 //!
 //! Provides unified interface for kernel and userspace backends.
@@ -72,6 +74,49 @@ pub trait NpuBackend: Debug + Send + Sync {
 
     /// Check if backend is ready
     fn is_ready(&self) -> bool;
+
+    /// Verify the last model load by reading back from SRAM.
+    ///
+    /// Compares a sample of on-chip data against the original program bytes.
+    /// Returns the number of bytes verified and whether they matched.
+    ///
+    /// Default: no-op (not all backends support SRAM readback).
+    fn verify_load(&mut self, _expected: &[u8]) -> Result<LoadVerification> {
+        Ok(LoadVerification::unsupported())
+    }
+
+    /// Mutate weights directly in on-chip SRAM.
+    ///
+    /// Writes `data` at `offset` within the model's weight region,
+    /// bypassing DMA for near-zero-latency small updates.
+    /// This is the fast path for `set_variable()` — ESN readout swaps,
+    /// online learning updates, etc.
+    ///
+    /// Default: falls back to `load_model` (full DMA re-upload).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if SRAM is not accessible or offset is out of bounds.
+    fn mutate_weights(&mut self, _offset: usize, _data: &[u8]) -> Result<()> {
+        Err(crate::error::AkidaError::capability_query_failed(
+            "Direct weight mutation not supported by this backend",
+        ))
+    }
+
+    /// Read raw bytes from on-chip SRAM at a given offset.
+    ///
+    /// Used for diagnostics, verification, and state inspection.
+    ///
+    /// Default: not supported.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if SRAM is not accessible.
+    fn read_sram(&mut self, _offset: usize, _length: usize) -> Result<Vec<u8>> {
+        Err(crate::error::AkidaError::capability_query_failed(
+            "SRAM read not supported by this backend",
+        ))
+    }
 }
 
 /// Model handle returned after loading
@@ -87,6 +132,51 @@ impl ModelHandle {
     /// Get model ID
     pub const fn id(&self) -> u32 {
         self.0
+    }
+}
+
+/// Result of model load verification via SRAM readback.
+#[derive(Debug, Clone)]
+pub struct LoadVerification {
+    /// Whether the verification is supported by this backend.
+    pub supported: bool,
+    /// Number of bytes sampled for verification.
+    pub bytes_checked: usize,
+    /// Number of bytes that matched expected data.
+    pub bytes_matched: usize,
+    /// Whether the load is verified correct.
+    pub verified: bool,
+}
+
+impl LoadVerification {
+    /// Backend doesn't support SRAM readback.
+    pub const fn unsupported() -> Self {
+        Self {
+            supported: false,
+            bytes_checked: 0,
+            bytes_matched: 0,
+            verified: false,
+        }
+    }
+
+    /// Create a successful verification result.
+    pub const fn ok(bytes_checked: usize) -> Self {
+        Self {
+            supported: true,
+            bytes_checked,
+            bytes_matched: bytes_checked,
+            verified: true,
+        }
+    }
+
+    /// Create a failed verification result.
+    pub const fn mismatch(bytes_checked: usize, bytes_matched: usize) -> Self {
+        Self {
+            supported: true,
+            bytes_checked,
+            bytes_matched,
+            verified: false,
+        }
     }
 }
 

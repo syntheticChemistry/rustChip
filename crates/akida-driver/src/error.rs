@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Error types for Akida driver operations
 
 use std::path::PathBuf;

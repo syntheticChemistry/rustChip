@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Channel count benchmark — Discovery 1 from BEYOND_SDK.md.
 //!
 //! "InputConv: 1 or 3 channels only" — SDK enforced, NOT silicon limited.
@@ -27,7 +29,10 @@ fn main() -> Result<()> {
     println!("Verifies that the 'InputConv: 1 or 3 channels only' SDK limit is SDK-enforced,");
     println!("not a silicon constraint. Any channel count works in hardware.");
     println!();
-    println!("  {:>10}  {:>12}  {:>10}  {:>10}", "channels", "µs/infer", "Hz", "vs ch=1");
+    println!(
+        "  {:>10}  {:>12}  {:>10}  {:>10}",
+        "channels", "µs/infer", "Hz", "vs ch=1"
+    );
     println!("  {:-<10}  {:-<12}  {:-<10}  {:-<10}", "", "", "", "");
 
     let manager = akida_driver::DeviceManager::discover()?;
@@ -53,10 +58,18 @@ fn main() -> Result<()> {
         let us = t0.elapsed().as_micros() as f64 / ITERATIONS as f64;
         let baseline = *baseline_us.get_or_insert(us);
 
-        let note = if channels == 50 { " ← physics vectors" } else { "" };
+        let note = if channels == 50 {
+            " ← physics vectors"
+        } else {
+            ""
+        };
         println!(
             "  {:>10}  {:>12.0}  {:>10.0}  {:>9.2}×{}",
-            channels, us, 1e6 / us, baseline / us, note
+            channels,
+            us,
+            1e6 / us,
+            baseline / us,
+            note
         );
     }
 

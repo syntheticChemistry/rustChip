@@ -22,11 +22,22 @@ engineering team as a complete, self-contained artifact.
 
 ```
 akida-chip                  ← no deps (pure silicon model)
+  src/sram.rs               ← BAR1 layout model, SramKind, ProbePoint
     ↑
 akida-driver                ← depends on akida-chip + rustix + libc (VFIO ioctls)
+  src/sram.rs               ← SramAccessor (BAR0 register + BAR1 R/W)
+  src/tenancy.rs            ← MultiTenantDevice (NP slot management)
+  src/evolution.rs          ← NpuEvolver (online weight mutation)
+  src/puf.rs                ← PUF fingerprinting
+  src/sentinel.rs           ← DriftMonitor (domain shift detection)
+  src/backend.rs            ← NpuBackend trait (verify_load, mutate_weights, read_sram)
+  src/capabilities.rs       ← Capabilities::from_bar0() (runtime discovery)
     ↑               ↑
-akida-models      akida-bench     akida-cli
-(FlatBuffer)      (10 benchmarks) (CLI tool)
+akida-models      akida-bench       akida-cli
+  src/builder.rs    probe_sram      (CLI tool)
+(FlatBuffer +       (SRAM diag)
+ ProgramBuilder)    bench_bar
+                    bench_exp002
 ```
 
 Do not create circular dependencies. `akida-chip` must remain zero-dependency.
@@ -83,6 +94,8 @@ Every unsafe block must have:
 2. **Invariants** the code maintains
 3. **Caller guarantees** needed
 
+`IoHandle` in `src/io.rs` is now zero-unsafe — uses `BorrowedFd<'fd>` via `rustix`.
+
 Do not add unsafe code outside `vfio/mod.rs` without a documented reason.
 
 ---
@@ -90,8 +103,8 @@ Do not add unsafe code outside `vfio/mod.rs` without a documented reason.
 ## Error handling
 
 All public functions return `Result<T, AkidaError>`. Never use `.unwrap()`
-or `.expect()` in library code. In binaries (bench/cli), `?` with `anyhow`
-is acceptable.
+or `.expect()` in library code. `anyhow` has been removed from all library
+crates — only binaries (bench/cli) may use `anyhow`.
 
 When adding a new error case, add a variant to `AkidaError` in
 `src/error.rs` — don't use `anyhow::Error` in the library crate.
@@ -225,6 +238,47 @@ routes the matrix multiply to hardware and applies tanh on the host, bypassing
 the activation constraint entirely. See `whitePaper/explorations/TANH_CONSTRAINT.md`.
 
 **Do not** hardcode tanh or bounded ReLU in physics simulation code. Use `EsnSubstrate`.
+
+---
+
+## SRAM access patterns
+
+### Using SramAccessor (userspace, no VFIO required)
+
+```rust
+use akida_driver::sram::SramAccessor;
+
+let mut sram = SramAccessor::open("0000:a1:00.0")?;
+// Layout auto-discovered from BAR0 (NP count, SRAM region config)
+
+let reg_val = sram.read_register(0x0)?;            // BAR0 register read
+let data = sram.read_bar1(np_offset, 4096)?;        // BAR1 SRAM read
+sram.write_bar1(np_offset, &weights)?;              // BAR1 SRAM write
+let results = sram.probe_bar1(&probe_offsets)?;     // multi-point probe
+```
+
+### Using probe_sram binary
+
+```bash
+cargo run --bin probe_sram              # read-only BAR0 + BAR1 probe
+cargo run --bin probe_sram -- scan      # deep scan for non-zero data
+cargo run --bin probe_sram -- test      # destructive write/readback test
+```
+
+### Using NpuBackend SRAM methods
+
+Any `NpuBackend` implementor supports:
+- `verify_load(&model_bytes)` → `LoadVerification` (SRAM readback integrity)
+- `mutate_weights(offset, &patch)` → zero-DMA weight update
+- `read_sram(offset, length)` → raw SRAM read
+
+### Using Capabilities::from_bar0()
+
+```rust
+let caps = Capabilities::from_bar0("0000:a1:00.0")?;
+// Reads NP count, SRAM per NP, mesh topology from BAR0 registers
+// No sysfs akida_* attributes needed — works with any PCIe-visible device
+```
 
 ---
 

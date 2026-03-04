@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! NP mesh topology and routing model.
 //!
 //! Established by hardware probing and C++ engine symbol analysis.
@@ -28,7 +30,12 @@ pub struct MeshTopology {
 
 impl MeshTopology {
     /// AKD1000 reference topology (confirmed by probing).
-    pub const AKD1000: Self = Self { x: 5, y: 8, z: 2, functional: 78 };
+    pub const AKD1000: Self = Self {
+        x: 5,
+        y: 8,
+        z: 2,
+        functional: 78,
+    };
 
     /// Total NP slots in the mesh.
     #[must_use]
@@ -61,18 +68,18 @@ pub struct NpCapabilities {
 
 /// AKD1000 NP capability profile (from HARDWARE.md).
 pub const AKD1000_NP: NpCapabilities = NpCapabilities {
-    npus_per_node:        4,
-    macs_per_npu:         128,
-    sram_per_npu_kb_min:  50,
-    sram_per_npu_kb_max:  130,
-    weight_bits:          &[1, 2, 4],
-    activation_bits:      &[1, 2, 4],
+    npus_per_node: 4,
+    macs_per_npu: 128,
+    sram_per_npu_kb_min: 50,
+    sram_per_npu_kb_max: 130,
+    weight_bits: &[1, 2, 4],
+    activation_bits: &[1, 2, 4],
 };
 
 /// Total MACs for AKD1000.
 pub const AKD1000_TOTAL_MACS: u32 =
     MeshTopology::AKD1000.functional * AKD1000_NP.npus_per_node * AKD1000_NP.macs_per_npu;
-    // = 78 × 4 × 128 = 39,936
+// = 78 × 4 × 128 = 39,936
 
 /// SkipDMA — NP-to-NP data routing without PCIe round-trip.
 ///

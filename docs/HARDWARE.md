@@ -216,6 +216,28 @@ The `akida_pcie` driver exposes `/dev/akida0`. With the right ioctls or
 mmap, we could theoretically bypass everything and talk to BAR registers
 directly. Uncharted territory — the driver source is on GitHub.
 
+### Layer 5: Direct SRAM Access (rustChip)
+
+rustChip provides direct BAR0 register and BAR1 SRAM read/write via
+`SramAccessor` (akida-driver). The C++ engine exposes multiple SRAM types
+per NP:
+
+| SRAM Type | Width | Purpose |
+|-----------|-------|---------|
+| Filter (FSRAM) | 64b | Filter/synapse weights |
+| Threshold (TSRAM) | 51b | Neuron threshold storage |
+| Event (EVSRAM) | 32b | Event buffers |
+| Status (STSRAM) | 32b | Neuron state/status |
+
+**BAR1 access methodology**: `SramAccessor` combines BAR0 register probing
+with BAR1 memory-mapped access. `VfioBackend::map_bar1()` provides the
+VFIO path for BAR1 SRAM. `Capabilities::from_bar0()` extracts runtime NP
+count, SRAM size, and mesh topology from BAR0 registers.
+
+**probe_sram binary**: Three modes — `probe` (register discovery), `scan`
+(BAR1 region enumeration), `test` (read/write verification). Use for
+SRAM layout exploration and load verification.
+
 ---
 
 ## 5. Performance Envelope

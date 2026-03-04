@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! bench_online_evolution — Live classifier adaptation at 136 gen/sec
 //!
 //! Validates the online evolution claim from baseCamp/systems/online_evolution.md:
@@ -34,7 +36,9 @@ impl Xoshiro {
             seed.rotate_right(5),
         ];
         let mut rng = Self { s };
-        for _ in 0..20 { let _ = rng.next_u64(); }
+        for _ in 0..20 {
+            let _ = rng.next_u64();
+        }
         rng
     }
 
@@ -90,9 +94,18 @@ struct SyntheticTask {
 impl SyntheticTask {
     fn new(input_dim: usize, output_dim: usize, seed: u64) -> Self {
         let mut rng = Xoshiro::new(seed);
-        let true_weights = (0..input_dim * output_dim).map(|_| rng.next_normal() * 0.5).collect();
+        let true_weights = (0..input_dim * output_dim)
+            .map(|_| rng.next_normal() * 0.5)
+            .collect();
         let dist_mean = vec![0.0f32; input_dim];
-        Self { input_dim, output_dim, true_weights, dist_mean, dist_std: 1.0, rng }
+        Self {
+            input_dim,
+            output_dim,
+            true_weights,
+            dist_mean,
+            dist_std: 1.0,
+            rng,
+        }
     }
 
     fn sample(&mut self, n: usize) -> (Vec<Vec<f32>>, Vec<usize>) {
@@ -113,12 +126,15 @@ impl SyntheticTask {
     fn classify_true(&self, x: &[f32]) -> usize {
         let scores: Vec<f32> = (0..self.output_dim)
             .map(|j| {
-                x.iter().enumerate()
+                x.iter()
+                    .enumerate()
                     .map(|(i, &xi)| xi * self.true_weights[i * self.output_dim + j])
                     .sum::<f32>()
             })
             .collect();
-        scores.iter().enumerate()
+        scores
+            .iter()
+            .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
             .unwrap_or(0)
@@ -147,26 +163,38 @@ impl EvolvableClassifier {
     fn new(input_dim: usize, output_dim: usize, seed: u64) -> Self {
         let mut rng = Xoshiro::new(seed);
         // Initialize near zero (before training)
-        let weights = (0..input_dim * output_dim).map(|_| rng.next_normal() * 0.01).collect();
-        Self { input_dim, output_dim, weights, rng }
+        let weights = (0..input_dim * output_dim)
+            .map(|_| rng.next_normal() * 0.01)
+            .collect();
+        Self {
+            input_dim,
+            output_dim,
+            weights,
+            rng,
+        }
     }
 
     fn infer(&self, x: &[f32]) -> usize {
         let scores: Vec<f32> = (0..self.output_dim)
             .map(|j| {
-                x.iter().enumerate()
+                x.iter()
+                    .enumerate()
                     .map(|(i, &xi)| xi * self.weights[i * self.output_dim + j])
                     .sum::<f32>()
             })
             .collect();
-        scores.iter().enumerate()
+        scores
+            .iter()
+            .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
             .unwrap_or(0)
     }
 
     fn accuracy(&self, inputs: &[Vec<f32>], labels: &[usize]) -> f32 {
-        let correct = inputs.iter().zip(labels.iter())
+        let correct = inputs
+            .iter()
+            .zip(labels.iter())
             .filter(|(x, &l)| self.infer(x) == l)
             .count();
         correct as f32 / inputs.len() as f32
@@ -181,7 +209,8 @@ impl EvolvableClassifier {
 
     /// Generate a perturbed candidate (CMA-ES style, but simplified)
     fn perturb(&mut self, sigma: f32) -> Vec<f32> {
-        self.weights.iter()
+        self.weights
+            .iter()
             .map(|&w| {
                 let delta = self.rng.next_normal() * sigma;
                 // Respect int4 quantization range [-1, 1] (normalized)
@@ -246,23 +275,26 @@ fn run_evolution(
 
     for gen in 0..max_generations {
         // Generate population
-        let candidates: Vec<Vec<f32>> = (0..pop_size)
-            .map(|_| classifier.perturb(sigma))
-            .collect();
+        let candidates: Vec<Vec<f32>> = (0..pop_size).map(|_| classifier.perturb(sigma)).collect();
 
         // Evaluate each candidate
-        let scores: Vec<f32> = candidates.iter().map(|c| {
-            let mut temp = EvolvableClassifier {
-                input_dim: classifier.input_dim,
-                output_dim: classifier.output_dim,
-                weights: c.clone(),
-                rng: Xoshiro::new(gen as u64),
-            };
-            temp.accuracy(&eval_inputs, &eval_labels)
-        }).collect();
+        let scores: Vec<f32> = candidates
+            .iter()
+            .map(|c| {
+                let mut temp = EvolvableClassifier {
+                    input_dim: classifier.input_dim,
+                    output_dim: classifier.output_dim,
+                    weights: c.clone(),
+                    rng: Xoshiro::new(gen as u64),
+                };
+                temp.accuracy(&eval_inputs, &eval_labels)
+            })
+            .collect();
 
         // Select best
-        let best_idx = scores.iter().enumerate()
+        let best_idx = scores
+            .iter()
+            .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
             .unwrap_or(0);
@@ -289,7 +321,7 @@ fn run_evolution(
         }
 
         if best_accuracy >= target_accuracy + 0.02 {
-            break;  // Early stop if well above target
+            break; // Early stop if well above target
         }
     }
 
@@ -325,20 +357,28 @@ fn task_speaker_adapt(verbose: bool) -> Result<EvolutionResult> {
     pretrain_ridge(&task, &mut classifier, 500, 42);
 
     let result = run_evolution(
-        &mut task, &mut classifier,
+        &mut task,
+        &mut classifier,
         "speaker_adapt",
-        0.93,   // target: 93% (speaker-specific, vs 93.8% general)
-        800,    // max 800 generations (5.9 sec at 136 gen/sec)
-        5,      // population size (CMA-ES like)
-        0.05,   // sigma (small perturbations)
+        0.93, // target: 93% (speaker-specific, vs 93.8% general)
+        800,  // max 800 generations (5.9 sec at 136 gen/sec)
+        5,    // population size (CMA-ES like)
+        0.05, // sigma (small perturbations)
         verbose,
     );
 
-    println!("  Initial: {:.1}%  →  Final: {:.1}%  (target: {:.1}%)",
-             result.initial_accuracy * 100.0, result.final_accuracy * 100.0, result.target_accuracy * 100.0);
+    println!(
+        "  Initial: {:.1}%  →  Final: {:.1}%  (target: {:.1}%)",
+        result.initial_accuracy * 100.0,
+        result.final_accuracy * 100.0,
+        result.target_accuracy * 100.0
+    );
     if let Some(c_gen) = result.convergence_gen {
-        println!("  Converged at generation {} ({:.1}s)",
-                 c_gen, result.convergence_sec.unwrap_or(0.0));
+        println!(
+            "  Converged at generation {} ({:.1}s)",
+            c_gen,
+            result.convergence_sec.unwrap_or(0.0)
+        );
     }
 
     Ok(result)
@@ -359,26 +399,33 @@ fn task_domain_shift(verbose: bool) -> Result<EvolutionResult> {
     };
     println!("  Pre-shift accuracy:  {:.1}%", pre_shift_acc * 100.0);
 
-    task.inject_domain_shift(0.8);  // significant shift
+    task.inject_domain_shift(0.8); // significant shift
 
     let post_shift_acc = {
         let (eval_inputs, eval_labels) = task.sample(200);
         classifier.accuracy(&eval_inputs, &eval_labels)
     };
-    println!("  Post-shift accuracy: {:.1}% (before adaptation)", post_shift_acc * 100.0);
+    println!(
+        "  Post-shift accuracy: {:.1}% (before adaptation)",
+        post_shift_acc * 100.0
+    );
 
     let result = run_evolution(
-        &mut task, &mut classifier,
+        &mut task,
+        &mut classifier,
         "domain_shift",
-        0.88,   // target: 88% post-shift recovery
+        0.88, // target: 88% post-shift recovery
         500,
         5,
-        0.08,   // larger sigma for domain recovery
+        0.08, // larger sigma for domain recovery
         verbose,
     );
 
-    println!("  Recovered:  {:.1}%  (target: {:.1}%)",
-             result.final_accuracy * 100.0, result.target_accuracy * 100.0);
+    println!(
+        "  Recovered:  {:.1}%  (target: {:.1}%)",
+        result.final_accuracy * 100.0,
+        result.target_accuracy * 100.0
+    );
 
     Ok(result)
 }
@@ -403,7 +450,8 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
     for (i, classifier) in member_classifiers.iter_mut().enumerate() {
         let mut sub_task = SyntheticTask::new(128, 5, i as u64 * 99999);
         let result = run_evolution(
-            &mut sub_task, classifier,
+            &mut sub_task,
+            classifier,
             &format!("ensemble_member_{}", i),
             0.85,
             200,
@@ -422,27 +470,41 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
     for (x, &label) in test_inputs.iter().zip(test_labels.iter()) {
         let votes: Vec<usize> = member_classifiers.iter().map(|c| c.infer(x)).collect();
         let mut counts = vec![0usize; 5];
-        for &v in &votes { counts[v] += 1; }
-        let ensemble_pred = counts.iter().enumerate()
+        for &v in &votes {
+            counts[v] += 1;
+        }
+        let ensemble_pred = counts
+            .iter()
+            .enumerate()
             .max_by_key(|(_, &c)| c)
             .map(|(i, _)| i)
             .unwrap_or(0);
-        if ensemble_pred == label { correct += 1; }
+        if ensemble_pred == label {
+            correct += 1;
+        }
     }
     let ensemble_acc = correct as f32 / test_inputs.len() as f32;
 
     let avg_member_acc = member_accuracies.iter().sum::<f32>() / member_accuracies.len() as f32;
 
     println!("  Average member accuracy: {:.1}%", avg_member_acc * 100.0);
-    println!("  Ensemble accuracy:       {:.1}% ({:.1}% improvement)",
-             ensemble_acc * 100.0, (ensemble_acc - avg_member_acc) * 100.0);
-    println!("  Time to build 10-member ensemble: {:.1}s", ensemble_elapsed.as_secs_f64());
-    println!("  Ensemble inference cost: 10 × 86 µs set_variable + 10 × 54 µs infer = {:.0} µs",
-             10.0 * 86.0 + 10.0 * 54.0);
+    println!(
+        "  Ensemble accuracy:       {:.1}% ({:.1}% improvement)",
+        ensemble_acc * 100.0,
+        (ensemble_acc - avg_member_acc) * 100.0
+    );
+    println!(
+        "  Time to build 10-member ensemble: {:.1}s",
+        ensemble_elapsed.as_secs_f64()
+    );
+    println!(
+        "  Ensemble inference cost: 10 × 86 µs set_variable + 10 × 54 µs infer = {:.0} µs",
+        10.0 * 86.0 + 10.0 * 54.0
+    );
 
     Ok(EvolutionResult {
         task_name: "ensemble".to_string(),
-        generations: 2000,  // 10 × 200
+        generations: 2000, // 10 × 200
         elapsed: ensemble_elapsed,
         gen_per_sec: 2000.0 / ensemble_elapsed.as_secs_f64(),
         initial_accuracy: avg_member_acc,
@@ -469,11 +531,16 @@ fn pretrain_ridge(
     let labels: Vec<usize> = inputs.iter().map(|x| task.classify_true(x)).collect();
 
     // One-hot encode labels
-    let y: Vec<Vec<f32>> = labels.iter().map(|&l| {
-        let mut v = vec![0.0f32; task.output_dim];
-        if l < task.output_dim { v[l] = 1.0; }
-        v
-    }).collect();
+    let y: Vec<Vec<f32>> = labels
+        .iter()
+        .map(|&l| {
+            let mut v = vec![0.0f32; task.output_dim];
+            if l < task.output_dim {
+                v[l] = 1.0;
+            }
+            v
+        })
+        .collect();
 
     // Ridge regression: W = (X^T X + λI)^-1 X^T Y (simplified, coordinate descent)
     let lambda = 0.01f32;
@@ -514,12 +581,15 @@ fn pretrain_ridge(
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let use_sw  = args.iter().any(|a| a == "--sw");
+    let use_sw = args.iter().any(|a| a == "--sw");
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
-    let task_arg = args.iter().find_map(|a| a.strip_prefix("--task="))
-        .or_else(|| args.iter().find_map(|a| {
-            if a == "--task" { None } else { None }
-        }))
+    let task_arg = args
+        .iter()
+        .find_map(|a| a.strip_prefix("--task="))
+        .or_else(|| {
+            args.iter()
+                .find_map(|a| if a == "--task" { None } else { None })
+        })
         .unwrap_or("all");
 
     println!("╔══════════════════════════════════════════════════════════════════╗");
@@ -593,22 +663,29 @@ fn main() -> Result<()> {
 
     println!();
     println!("── Results Summary ──────────────────────────────────────────────────");
-    println!("{:<20} {:>8} {:>10} {:>10} {:>10} {:>8}",
-             "Task", "Gens", "Gen/sec", "Init%", "Final%", "Pass?");
+    println!(
+        "{:<20} {:>8} {:>10} {:>10} {:>10} {:>8}",
+        "Task", "Gens", "Gen/sec", "Init%", "Final%", "Pass?"
+    );
     println!("{}", "─".repeat(72));
 
     for r in &all_results {
-        println!("{:<20} {:>8} {:>10.0} {:>10.1} {:>10.1} {:>8}",
-                 r.task_name,
-                 r.generations,
-                 r.gen_per_sec,
-                 r.initial_accuracy * 100.0,
-                 r.final_accuracy * 100.0,
-                 if r.passed() { "✅" } else { "⚠" });
+        println!(
+            "{:<20} {:>8} {:>10.0} {:>10.1} {:>10.1} {:>8}",
+            r.task_name,
+            r.generations,
+            r.gen_per_sec,
+            r.initial_accuracy * 100.0,
+            r.final_accuracy * 100.0,
+            if r.passed() { "✅" } else { "⚠" }
+        );
         if let Some(c_sec) = r.convergence_sec {
-            println!("{:<20}   ↳ converged in {:.1}s ({} gens)",
-                     "", c_sec,
-                     r.convergence_gen.unwrap_or(0));
+            println!(
+                "{:<20}   ↳ converged in {:.1}s ({} gens)",
+                "",
+                c_sec,
+                r.convergence_gen.unwrap_or(0)
+            );
         }
     }
 

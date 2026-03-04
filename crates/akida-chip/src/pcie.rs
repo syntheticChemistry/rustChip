@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! PCIe identifiers and timing constants.
 //!
 //! Source: AKD1000 hardware + AKD1500 datasheet v1.2 (June 2025).

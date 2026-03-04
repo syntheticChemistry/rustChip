@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Pure Rust driver for BrainChip Akida neuromorphic processors.
 //!
 //! This crate provides the full software stack for AKD1000 / AKD1500 access.
@@ -48,11 +50,11 @@
 //! | Energy per inference | 1.4 µJ |
 //! | 24-hour production calls (Exp 022) | 5,978 |
 
+#![deny(clippy::expect_used, clippy::unwrap_used)]
 #![warn(missing_docs)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
-#![allow(clippy::doc_markdown)]
 
 mod backend;
 pub mod backends;
@@ -60,24 +62,31 @@ mod capabilities;
 mod device;
 mod discovery;
 mod error;
+pub mod evolution;
 pub mod hybrid;
 mod inference;
 mod io;
 mod loading;
 pub mod mmio;
+pub mod puf;
+pub mod sentinel;
 pub mod setup;
+pub mod sram;
+pub mod tenancy;
 pub mod vfio;
 
 /// Hardware identification constants (re-exported from akida-chip).
 pub mod pcie_ids {
+    pub use akida_chip::pcie::device_id;
     pub use akida_chip::pcie::{
         lspci_filter, ChipVariant, ALL_DEVICE_IDS, BRAINCHIP_VENDOR_ID,
         MEASURED_DMA_THROUGHPUT_MB_S, OPTIMAL_BATCH_SIZE, PCIE_GEN2_X1_ROUNDTRIP_US,
     };
-    pub use akida_chip::pcie::device_id;
 }
 
-pub use backend::{select_backend, BackendSelection, BackendType, ModelHandle, NpuBackend};
+pub use backend::{
+    select_backend, BackendSelection, BackendType, LoadVerification, ModelHandle, NpuBackend,
+};
 pub use backends::software::{pack_software_model, SoftwareBackend};
 pub use backends::UserspaceBackend;
 pub use capabilities::{
@@ -87,7 +96,9 @@ pub use capabilities::{
 pub use device::{AkidaDevice, DeviceHandle};
 pub use discovery::{DeviceInfo, DeviceManager};
 pub use error::{AkidaError, Result};
-pub use hybrid::{EsnSubstrate, EsnWeights, HybridEsn, SubstrateInfo, SubstrateMode, SubstrateSelector};
+pub use hybrid::{
+    EsnSubstrate, EsnWeights, HybridEsn, SubstrateInfo, SubstrateMode, SubstrateSelector,
+};
 pub use inference::{InferenceConfig, InferenceExecutor, InferenceResult};
 pub use loading::{LoadConfig, LoadMetrics, ModelLoader, ModelProgram, NpuConfig};
 pub use vfio::VfioBackend;
@@ -95,8 +106,8 @@ pub use vfio::VfioBackend;
 /// Commonly used types.
 pub mod prelude {
     pub use crate::{
-        AkidaDevice, AkidaError, Capabilities, DeviceManager, EsnSubstrate, EsnWeights,
-        HybridEsn, InferenceConfig, InferenceExecutor, InferenceResult, LoadConfig, ModelLoader,
-        ModelProgram, NpuConfig, Result, SubstrateMode, SubstrateSelector, VfioBackend,
+        AkidaDevice, AkidaError, Capabilities, DeviceManager, EsnSubstrate, EsnWeights, HybridEsn,
+        InferenceConfig, InferenceExecutor, InferenceResult, LoadConfig, ModelLoader, ModelProgram,
+        NpuConfig, Result, SubstrateMode, SubstrateSelector, VfioBackend,
     };
 }

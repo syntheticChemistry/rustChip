@@ -131,6 +131,12 @@ validation of multi-program NP addressing via `program_external()` address argum
 
 ---
 
+## Rust Implementation
+
+`MultiTenantDevice` is now scaffolded at [`crates/akida-driver/src/tenancy.rs`](../../crates/akida-driver/src/tenancy.rs), with `ProgramSlot`, `load_at_offset()`, and `verify_isolation()`. Phase 2 SRAM verification is operational via `verify_isolation()` and `bench_exp002_tenancy --hw`.
+
+---
+
 ## Validation Protocol
 
 `metalForge/experiments/002_MULTI_TENANCY.md` defines the full experiment:

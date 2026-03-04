@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! FC width scaling benchmark — reproduces Discovery 5 from BEYOND_SDK.md.
 //!
 //! Tests the latency vs model width curve for FullyConnected layers.
@@ -41,7 +43,10 @@ fn main() -> Result<()> {
         "  {:>7}  {:>12}  {:>12}  {:>12}  {:>10}",
         "width", "prog size", "upload µs", "Hz", "vs 64"
     );
-    println!("  {:-<7}  {:-<12}  {:-<12}  {:-<12}  {:-<10}", "", "", "", "", "");
+    println!(
+        "  {:-<7}  {:-<12}  {:-<12}  {:-<12}  {:-<10}",
+        "", "", "", "", ""
+    );
 
     let manager = akida_driver::DeviceManager::discover()?;
     let mut device = manager.open_first()?;

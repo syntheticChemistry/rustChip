@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! DMA throughput benchmark — sustained read + write to device SRAM.
 //!
 //! Reference measurement (AKD1000, PCIe x1 Gen2, Feb 2026):

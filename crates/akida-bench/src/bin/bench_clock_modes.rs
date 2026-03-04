@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Clock mode benchmark — reproduces Discovery 4 from BEYOND_SDK.md.
 //!
 //! "3 modes: Performance / Economy / LowPower"
@@ -54,10 +56,7 @@ fn main() -> Result<()> {
     for (mode, name) in &modes {
         // Attempt to set clock mode via sysfs (requires write permission)
         if let Err(e) = set_clock_mode(device.as_raw_fd(), mode) {
-            println!(
-                "  {:>12}  (cannot set clock mode: {})",
-                name, e
-            );
+            println!("  {:>12}  (cannot set clock mode: {})", name, e);
             continue;
         }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Benchmark: Parse multiple Akida models
 //!
 //! Tests parser performance and accuracy across different model sizes.

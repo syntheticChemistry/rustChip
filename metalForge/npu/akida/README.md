@@ -18,7 +18,7 @@
 | Total MACs | 39,936 |
 | On-chip SRAM | 8 MB |
 | BAR0 | 16 MB (registers) |
-| BAR1 | 16 GB (NP mesh window — Discovery 8) |
+| BAR1 | 16 GB (NP mesh window — Discovery 8). **Direct access operational** via `SramAccessor` and `VfioBackend::map_bar1()` |
 | DMA throughput | 37 MB/s (sustained) |
 | Single inference | 54 µs / 18,500 Hz |
 | Energy/inference | 1.4 µJ |
@@ -92,8 +92,13 @@ All probing is done via `akida-bench` binaries:
 # Hardware identification
 cargo run --bin enumerate
 
-# BAR layout (Discovery 8)
+# BAR layout (Discovery 8) — includes actual MMIO BAR0 register probing via SramAccessor
 cargo run --bin bench_bar
+
+# Direct BAR0/BAR1 SRAM access (SramAccessor API)
+cargo run --bin probe_sram              # probe: BAR0 register dump + BAR1 probe
+cargo run --bin probe_sram -- scan      # scan: find non-zero data in BAR1
+cargo run --bin probe_sram -- test      # test: write/readback (destructive)
 
 # Each BEYOND_SDK discovery
 cargo run --bin bench_channels     # Discovery 1
@@ -108,12 +113,25 @@ cargo run --bin bench_latency      # Production latency
 
 ---
 
+## SRAM Access API
+
+| API | Purpose |
+|-----|---------|
+| `SramAccessor` | Userspace BAR0 register R/W + BAR1 SRAM R/W (no VFIO required) |
+| `VfioBackend::map_bar1()` | VFIO-backed BAR1 SRAM mapping for `read_sram`, `verify_load`, `mutate_weights` |
+| `Capabilities::from_bar0()` | Runtime discovery: NP count, SRAM size, mesh topology |
+| `NpuBackend::verify_load()` | SRAM readback integrity check after model load |
+| `NpuBackend::mutate_weights()` | Zero-DMA direct weight patches to on-chip SRAM |
+| `NpuBackend::read_sram()` | Raw SRAM reads for diagnostics |
+
+---
+
 ## Outstanding Questions
 
 | Question | Status | How to resolve |
 |----------|--------|---------------|
 | eDMA descriptor layout | ❓ Inferred from DW spec | BrainChip can confirm / DW databook |
 | Per-NP register block format | ❓ Pattern confirmed, content unknown | Requires C++ engine deeper analysis |
-| BAR1 sparse mapping offsets | ❓ Reads zero in first 64 KB | Requires programmed model to see NP mapping |
+| BAR1 sparse mapping offsets | 🔧 probe_sram scan mode explores | SramAccessor + map_bar1() operational; offsets vary by loaded model |
 | On-chip learning registers | ❓ Symbol exists, path unknown | Requires BrainChip disclosure |
 | AKD1500 register deltas | ❓ Extrapolated from AKD1000 | Requires AKD1500 hardware |

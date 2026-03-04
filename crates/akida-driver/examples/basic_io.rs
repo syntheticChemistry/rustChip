@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Basic I/O test with Akida device
 //!
 //! Demonstrates opening a device and performing simple read/write operations.

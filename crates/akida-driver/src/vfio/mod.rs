@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! VFIO NPU backend — Pure Rust with DMA support
 //!
 //! This backend uses Linux VFIO (Virtual Function I/O) to provide:
@@ -52,8 +54,8 @@
 //! - VFIO ioctls use libc: rustix::ioctl requires Ioctl trait impl per variant;
 //!   VFIO has 9+ ioctls with varied semantics (int, struct, fd ptr, C string).
 
-use crate::backends::read_hwmon_power;
 use crate::backend::{BackendType, ModelHandle, NpuBackend};
+use crate::backends::read_hwmon_power;
 use crate::capabilities::Capabilities;
 use crate::error::{AkidaError, Result};
 use crate::mmio::{regs, Bar, MappedRegion};
@@ -183,177 +185,13 @@ struct VfioDmaUnmap {
     size: u64,
 }
 
-/// DMA buffer for fast data transfer
-#[derive(Debug)]
-pub struct DmaBuffer {
-    /// Virtual address (user-space)
-    vaddr: *mut u8,
-    /// IOVA (device-visible address)
-    iova: u64,
-    /// Size in bytes
-    size: usize,
-    /// Container fd for cleanup
-    container_fd: RawFd,
-}
-
-impl DmaBuffer {
-    /// Create a new DMA buffer
-    fn new(container_fd: RawFd, size: usize, iova: u64) -> Result<Self> {
-        // Allocate page-aligned memory
-        let layout = std::alloc::Layout::from_size_align(size, 4096)
-            .map_err(|e| AkidaError::transfer_failed(format!("Invalid DMA buffer layout: {e}")))?;
-
-        // SAFETY: Raw alloc_zeroed necessary for page-aligned DMA buffer (4096). Invariants:
-        // (1) Layout from from_size_align, size>0, align 4096 power-of-two; (2) returns valid
-        // ptr for layout.size() bytes or null on OOM; (3) dealloc in Drop with same layout.
-        // Caller guarantees: size from aligned_size, dealloc on Drop.
-        let vaddr = unsafe { std::alloc::alloc_zeroed(layout) };
-
-        if vaddr.is_null() {
-            return Err(AkidaError::transfer_failed("Failed to allocate DMA buffer"));
-        }
-
-        // SAFETY: mlock necessary for VFIO DMA (prevents swap, ensures physical pages).
-        // Invariants: (1) vaddr from alloc_zeroed, valid for size bytes; (2) size matches
-        // layout.size(); (3) region [vaddr, vaddr+size) entirely within allocation.
-        if let Err(e) = unsafe { mlock(vaddr.cast(), size) } {
-            // SAFETY: vaddr allocated above with layout; cleanup on error path before return.
-            unsafe { std::alloc::dealloc(vaddr, layout) };
-            return Err(AkidaError::transfer_failed(format!(
-                "Failed to lock DMA memory: {e}"
-            )));
-        }
-
-        // Map the buffer for DMA
-        // Truncation safe: struct sizes fit in u32
-        #[allow(clippy::cast_possible_truncation)]
-        let dma_map = VfioDmaMap {
-            argsz: std::mem::size_of::<VfioDmaMap>() as u32,
-            flags: ioctls::VFIO_DMA_MAP_FLAG_READ | ioctls::VFIO_DMA_MAP_FLAG_WRITE,
-            vaddr: vaddr as u64,
-            iova,
-            size: size as u64,
-        };
-
-        tracing::debug!(
-            "DMA map attempt: vaddr={:#x}, iova={:#x}, size={:#x}, flags={:#x}",
-            dma_map.vaddr,
-            dma_map.iova,
-            dma_map.size,
-            dma_map.flags
-        );
-
-        // SAFETY: VFIO_IOMMU_MAP_DMA ioctl necessary for DMA - kernel maps user buffer to IOVA.
-        // Invariants: (1) container_fd valid from VFIO container open; (2) dma_map has argsz,
-        // vaddr/iova/size from our allocation; (3) _IOW ioctl reads dma_map; (4) layout matches kernel.
-        // Caller guarantees: container_fd open, dma_map properly initialized.
-        let ret = unsafe {
-            libc::ioctl(
-                container_fd,
-                ioctls::VFIO_IOMMU_MAP_DMA as _,
-                &raw const dma_map,
-            )
-        };
-
-        if ret < 0 {
-            let err = std::io::Error::last_os_error();
-            tracing::warn!("DMA map failed: {} (ret={})", err, ret);
-            // Clean up allocated memory on failure
-            // SAFETY: vaddr was allocated above with this exact layout and mlock'd
-            // successfully, so munlock and dealloc are valid cleanup operations
-            // Using rustix munlock (pure Rust)
-            unsafe {
-                let _ = munlock(vaddr.cast(), size);
-                std::alloc::dealloc(vaddr, layout);
-            };
-            return Err(AkidaError::transfer_failed(format!(
-                "Failed to map DMA: {err}"
-            )));
-        }
-
-        tracing::debug!("Created DMA buffer: vaddr={vaddr:p}, iova={iova:#x}, size={size:#x}");
-
-        Ok(Self {
-            vaddr,
-            iova,
-            size,
-            container_fd,
-        })
-    }
-
-    /// Get slice view of buffer for reading
-    pub const fn as_slice(&self) -> &[u8] {
-        // SAFETY: (1) vaddr from alloc in new(), valid for size; (2) we own the allocation;
-        // (3) &self ensures no concurrent mutation; (4) size unchanged since allocation.
-        unsafe { std::slice::from_raw_parts(self.vaddr, self.size) }
-    }
-
-    /// Get mutable slice view of buffer for writing
-    pub const fn as_mut_slice(&mut self) -> &mut [u8] {
-        // SAFETY: (1) vaddr valid for size; (2) &mut self gives exclusive access;
-        // (3) no aliasing; (4) size and alignment correct for [u8].
-        unsafe { std::slice::from_raw_parts_mut(self.vaddr, self.size) }
-    }
-
-    /// Get IOVA (device address)
-    pub const fn iova(&self) -> u64 {
-        self.iova
-    }
-
-    /// Get size
-    pub const fn size(&self) -> usize {
-        self.size
-    }
-}
-
-impl Drop for DmaBuffer {
-    fn drop(&mut self) {
-        // SAFETY: munlock necessary - vaddr was mlock'd in new(); must unlock before dealloc.
-        unsafe {
-            let _ = munlock(self.vaddr.cast(), self.size);
-        };
-
-        // Unmap DMA
-        let dma_unmap = VfioDmaUnmap {
-            argsz: std::mem::size_of::<VfioDmaUnmap>() as u32,
-            flags: 0,
-            iova: self.iova,
-            size: self.size as u64,
-        };
-
-        // SAFETY: VFIO_IOMMU_UNMAP_DMA ioctl necessary - kernel unmaps IOVA before dealloc.
-        // Invariants: (1) container_fd valid; (2) dma_unmap has iova/size from our mapping;
-        // (3) layout matches kernel VfioDmaUnmap; (4) called before dealloc.
-        unsafe {
-            libc::ioctl(
-                self.container_fd,
-                ioctls::VFIO_IOMMU_UNMAP_DMA as _,
-                &raw const dma_unmap,
-            );
-        }
-
-        // Deallocate memory (use safe Layout::from_size_align - eliminates one unsafe block)
-        let layout = std::alloc::Layout::from_size_align(self.size, 4096)
-            .expect("Layout valid: size from alloc in new(), 4096 is power-of-two");
-        // SAFETY: dealloc necessary; must match alloc_zeroed in new(). Invariants: (1) vaddr
-        // from alloc in new(); (2) layout matches; (3) munlock already called; (4) no refs.
-        unsafe { std::alloc::dealloc(self.vaddr, layout) };
-
-        tracing::debug!("Freed DMA buffer at iova={:#x}", self.iova);
-    }
-}
-
-// SAFETY: DmaBuffer owns its memory exclusively
-unsafe impl Send for DmaBuffer {}
-
-// SAFETY: DmaBuffer provides exclusive access via &mut self for writes
-// Reads are safe from multiple threads (memory is owned)
-unsafe impl Sync for DmaBuffer {}
+mod dma;
+pub use dma::DmaBuffer;
 
 /// VFIO NPU backend with DMA support
 #[derive(Debug)]
 pub struct VfioBackend {
-    /// PCIe address
+    /// `PCIe` address
     pcie_address: String,
     /// VFIO container file descriptor
     container: File,
@@ -361,10 +199,11 @@ pub struct VfioBackend {
     #[allow(dead_code)] // Needed for VFIO lifetime
     group: File,
     /// VFIO device file descriptor (for MMIO access)
-    #[allow(dead_code)] // Needed for VFIO device lifetime management
     device: File,
     /// BAR0 control registers (MMIO mapped)
     control_regs: MappedRegion,
+    /// BAR1 NP mesh / SRAM window (mapped on demand for direct SRAM access)
+    mesh_region: Option<MappedRegion>,
     /// Device capabilities
     capabilities: Capabilities,
     /// Input DMA buffer
@@ -425,6 +264,88 @@ impl VfioBackend {
         self.control_regs.write32(addr_lo, iova as u32);
         self.control_regs.write32(addr_hi, (iova >> 32) as u32);
         self.control_regs.write32(size_reg, size as u32);
+    }
+
+    /// Map BAR1 (NP mesh / SRAM window) for direct SRAM access.
+    ///
+    /// BAR1 is not mapped by default — DMA is the primary data transfer path.
+    /// Call this to enable direct SRAM read/write via MMIO, which is useful for:
+    /// - Testing and diagnostics
+    /// - Reading NP weight/activation state
+    /// - Low-level hardware exploration
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the VFIO region info query or mmap fails.
+    pub fn map_bar1(&mut self) -> Result<()> {
+        if self.mesh_region.is_some() {
+            tracing::debug!("BAR1 already mapped");
+            return Ok(());
+        }
+
+        let region = MappedRegion::map(&self.device, Bar::Model)?;
+        tracing::info!(
+            "Mapped BAR1 SRAM window: {} bytes ({} MB)",
+            region.size(),
+            region.size() / (1024 * 1024)
+        );
+        self.mesh_region = Some(region);
+        Ok(())
+    }
+
+    /// Read a 32-bit word from BAR1 SRAM at the given offset.
+    ///
+    /// Maps BAR1 on first access if not already mapped.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if BAR1 cannot be mapped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if offset is out of bounds (checked by `MappedRegion`).
+    pub fn read_sram_u32(&mut self, offset: usize) -> Result<u32> {
+        self.map_bar1()?;
+        let region = self
+            .mesh_region
+            .as_ref()
+            .ok_or_else(|| AkidaError::capability_query_failed("BAR1 not mapped"))?;
+        Ok(region.read32(offset))
+    }
+
+    /// Write a 32-bit word to BAR1 SRAM at the given offset.
+    ///
+    /// Maps BAR1 on first access if not already mapped.
+    ///
+    /// **Warning:** Writing to SRAM can corrupt loaded models.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if BAR1 cannot be mapped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if offset is out of bounds.
+    pub fn write_sram_u32(&mut self, offset: usize, value: u32) -> Result<()> {
+        self.map_bar1()?;
+        let region = self
+            .mesh_region
+            .as_ref()
+            .ok_or_else(|| AkidaError::capability_query_failed("BAR1 not mapped"))?;
+        region.write32(offset, value);
+        Ok(())
+    }
+
+    /// Whether BAR1 SRAM is currently mapped.
+    #[must_use]
+    pub fn has_sram_mapped(&self) -> bool {
+        self.mesh_region.is_some()
+    }
+
+    /// Get the mapped BAR1 region size in bytes (0 if not mapped).
+    #[must_use]
+    pub fn sram_size(&self) -> usize {
+        self.mesh_region.as_ref().map_or(0, MappedRegion::size)
     }
 
     /// Check the device is not busy. Returns `Err` if BUSY bit is set.
@@ -661,6 +582,7 @@ impl NpuBackend for VfioBackend {
             group,
             device,
             control_regs,
+            mesh_region: None,
             capabilities,
             input_buffer: None,
             output_buffer: None,
@@ -860,12 +782,113 @@ impl NpuBackend for VfioBackend {
     }
 
     fn is_ready(&self) -> bool {
-        // Check device status via MMIO
         let status = self.control_regs.read32(regs::STATUS);
         let ready = status & regs::status::READY != 0;
         let not_busy = status & regs::status::BUSY == 0;
         let no_error = status & regs::status::ERROR == 0;
         ready && not_busy && no_error
+    }
+
+    fn verify_load(&mut self, expected: &[u8]) -> Result<crate::backend::LoadVerification> {
+        use crate::backend::LoadVerification;
+
+        self.map_bar1()?;
+        let region = match self.mesh_region.as_ref() {
+            Some(r) => r,
+            None => return Ok(LoadVerification::unsupported()),
+        };
+
+        let sample_size = expected.len().min(4096).min(region.size());
+        if sample_size < 4 {
+            return Ok(LoadVerification::unsupported());
+        }
+
+        let mut matched = 0usize;
+        let step = 4;
+        for offset in (0..sample_size).step_by(step) {
+            if offset + step > sample_size {
+                break;
+            }
+            let on_chip = region.read32(offset);
+            let expected_word = u32::from_le_bytes([
+                expected[offset],
+                expected[offset + 1],
+                expected[offset + 2],
+                expected[offset + 3],
+            ]);
+            if on_chip == expected_word {
+                matched += step;
+            }
+        }
+
+        let checked = (sample_size / step) * step;
+        if matched == checked {
+            tracing::info!("SRAM readback verified: {checked} bytes match");
+            Ok(LoadVerification::ok(checked))
+        } else {
+            tracing::warn!("SRAM readback mismatch: {matched}/{checked} bytes match");
+            Ok(LoadVerification::mismatch(checked, matched))
+        }
+    }
+
+    fn mutate_weights(&mut self, offset: usize, data: &[u8]) -> Result<()> {
+        self.map_bar1()?;
+        let region = self
+            .mesh_region
+            .as_ref()
+            .ok_or_else(|| AkidaError::capability_query_failed("BAR1 not mapped"))?;
+
+        if offset + data.len() > region.size() {
+            return Err(AkidaError::transfer_failed(format!(
+                "Weight mutation out of bounds: offset={offset:#x}, len={}, BAR1 size={:#x}",
+                data.len(),
+                region.size()
+            )));
+        }
+
+        for (i, chunk) in data.chunks(4).enumerate() {
+            if chunk.len() == 4 {
+                let value = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                region.write32(offset + i * 4, value);
+            }
+        }
+
+        tracing::debug!(
+            "Mutated {} bytes at SRAM offset {offset:#x} via direct MMIO",
+            data.len()
+        );
+        Ok(())
+    }
+
+    fn read_sram(&mut self, offset: usize, length: usize) -> Result<Vec<u8>> {
+        self.map_bar1()?;
+        let region = self
+            .mesh_region
+            .as_ref()
+            .ok_or_else(|| AkidaError::capability_query_failed("BAR1 not mapped"))?;
+
+        if offset + length > region.size() {
+            return Err(AkidaError::transfer_failed(format!(
+                "SRAM read out of bounds: offset={offset:#x}, len={length}, BAR1 size={:#x}",
+                region.size()
+            )));
+        }
+
+        let mut buf = Vec::with_capacity(length);
+        let mut pos = offset;
+        while pos < offset + length {
+            let remaining = offset + length - pos;
+            if remaining >= 4 {
+                let val = region.read32(pos);
+                buf.extend_from_slice(&val.to_le_bytes());
+                pos += 4;
+            } else {
+                buf.push(0);
+                pos += 1;
+            }
+        }
+        buf.truncate(length);
+        Ok(buf)
     }
 }
 
@@ -944,7 +967,11 @@ pub fn bind_to_vfio(pcie_address: &str) -> crate::error::Result<()> {
     if Path::new(new_id).exists() {
         std::fs::write(
             new_id,
-            format!("{:04x} {:04x}", akida_chip::pcie::BRAINCHIP_VENDOR_ID, 0xBCA1u16),
+            format!(
+                "{:04x} {:04x}",
+                akida_chip::pcie::BRAINCHIP_VENDOR_ID,
+                0xBCA1u16
+            ),
         )
         .map_err(|e| AkidaError::hardware_error(format!("Cannot write vfio-pci/new_id: {e}")))?;
     }
@@ -995,14 +1022,17 @@ pub fn iommu_group(pcie_address: &str) -> crate::error::Result<u32> {
     use crate::error::AkidaError;
 
     let link = format!("/sys/bus/pci/devices/{pcie_address}/iommu_group");
-    let target = std::fs::read_link(&link)
-        .map_err(|e| AkidaError::hardware_error(format!("Cannot read iommu_group for {pcie_address}: {e}")))?;
+    let target = std::fs::read_link(&link).map_err(|e| {
+        AkidaError::hardware_error(format!("Cannot read iommu_group for {pcie_address}: {e}"))
+    })?;
 
     let group = target
         .file_name()
         .and_then(|n| n.to_str())
         .and_then(|s| s.parse::<u32>().ok())
-        .ok_or_else(|| AkidaError::hardware_error(format!("Cannot parse IOMMU group from {target:?}")))?;
+        .ok_or_else(|| {
+            AkidaError::hardware_error(format!("Cannot parse IOMMU group from {target:?}"))
+        })?;
 
     tracing::debug!("{pcie_address} → IOMMU group {group}");
     Ok(group)

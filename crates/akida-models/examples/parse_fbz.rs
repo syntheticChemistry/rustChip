@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Example: Parse Akida .fbz model file
 //!
 //! Demonstrates parsing of Akida model files with pure Rust.

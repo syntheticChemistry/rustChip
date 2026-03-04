@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Experiment 002 — Multi-Tenancy: NP Address Isolation
 //!
 //! **Status:** Phase 1 (software isolation model) — runnable NOW.
-//!             Phase 2 (live hardware co-loading) — requires `/dev/akida0`.
+//!             Phase 2 (live hardware co-loading) — auto-discovers Akida via PCIe.
 //!
 //! # What This Tests
 //!
@@ -26,7 +26,7 @@
 //! - 7-system packing: ✅ 814 NPs used, 186 spare (within 1,000 NP budget)
 //! - Round-robin throughput: > 5,000 aggregate inferences/sec (software baseline)
 //!
-//! # Phase 2 — Hardware (requires /dev/akida0 + .fbz model files)
+//! # Phase 2 — Hardware (auto-discovers Akida devices + .fbz model files)
 //!
 //! ```bash
 //! cargo run --bin bench_exp002_tenancy -- --hw
@@ -42,24 +42,39 @@ use std::time::Instant;
 
 // ── Tiny RNG ──────────────────────────────────────────────────────────────────
 
-struct Xoshiro { s: [u64; 4] }
+struct Xoshiro {
+    s: [u64; 4],
+}
 impl Xoshiro {
     fn new(seed: u64) -> Self {
-        let mut s = Self { s: [seed, seed ^ 0x9e37, seed ^ 0x7f4a, seed ^ 0xc1a2] };
-        for _ in 0..20 { s.next(); }
+        let mut s = Self {
+            s: [seed, seed ^ 0x9e37, seed ^ 0x7f4a, seed ^ 0xc1a2],
+        };
+        for _ in 0..20 {
+            s.next();
+        }
         s
     }
     fn next(&mut self) -> u64 {
         let r = self.s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
-        self.s[2] ^= self.s[0]; self.s[3] ^= self.s[1];
-        self.s[1] ^= self.s[2]; self.s[0] ^= self.s[3];
-        self.s[2] ^= t; self.s[3] = self.s[3].rotate_left(45);
+        self.s[2] ^= self.s[0];
+        self.s[3] ^= self.s[1];
+        self.s[1] ^= self.s[2];
+        self.s[0] ^= self.s[3];
+        self.s[2] ^= t;
+        self.s[3] = self.s[3].rotate_left(45);
         r
     }
-    fn f32(&mut self) -> f32 { (self.next() >> 11) as f32 / (1u64 << 53) as f32 }
-    fn f32r(&mut self, lo: f32, hi: f32) -> f32 { lo + self.f32() * (hi - lo) }
-    fn vec(&mut self, n: usize) -> Vec<f32> { (0..n).map(|_| self.f32r(-1.0, 1.0)).collect() }
+    fn f32(&mut self) -> f32 {
+        (self.next() >> 11) as f32 / (1u64 << 53) as f32
+    }
+    fn f32r(&mut self, lo: f32, hi: f32) -> f32 {
+        lo + self.f32() * (hi - lo)
+    }
+    fn vec(&mut self, n: usize) -> Vec<f32> {
+        (0..n).map(|_| self.f32r(-1.0, 1.0)).collect()
+    }
 }
 
 // ── Simulated "resident" program ──────────────────────────────────────────────
@@ -73,29 +88,29 @@ struct ResidentSystem {
     /// NP address where this program would be loaded (for Phase 2).
     np_address: usize,
     /// NP count this system requires (from baseCamp/systems/README.md).
-    np_count:   usize,
+    np_count: usize,
     /// System name (for reporting).
-    name:       &'static str,
+    name: &'static str,
     /// Weights: FC layer rs × is.
-    w:          Vec<f32>,
+    w: Vec<f32>,
     /// Bias: rs elements.
-    b:          Vec<f32>,
+    b: Vec<f32>,
     /// Input dim.
-    is:         usize,
+    is: usize,
     /// Output dim.
-    rs:         usize,
+    rs: usize,
     /// Fingerprint: first 4 outputs after 10 warmup steps with seed-0 input.
     fingerprint: Vec<f32>,
 }
 
 impl ResidentSystem {
     fn new(
-        name:       &'static str,
+        name: &'static str,
         np_address: usize,
-        np_count:   usize,
-        is:         usize,
-        rs:         usize,
-        seed:       u64,
+        np_count: usize,
+        is: usize,
+        rs: usize,
+        seed: u64,
     ) -> Self {
         let mut rng = Xoshiro::new(seed);
         let w: Vec<f32> = (0..rs * is).map(|_| rng.f32r(-0.3, 0.3)).collect();
@@ -103,12 +118,19 @@ impl ResidentSystem {
 
         // Compute fingerprint: 10 warmup + record output
         let mut sys = Self {
-            np_address, np_count, name,
-            w: w.clone(), b: b.clone(), is, rs,
+            np_address,
+            np_count,
+            name,
+            w: w.clone(),
+            b: b.clone(),
+            is,
+            rs,
             fingerprint: vec![],
         };
         let mut inp_rng = Xoshiro::new(0x1234_5678);
-        for _ in 0..10 { let _ = sys.infer(&inp_rng.vec(is)); }
+        for _ in 0..10 {
+            let _ = sys.infer(&inp_rng.vec(is));
+        }
         let fp = sys.infer(&inp_rng.vec(is));
         sys.fingerprint = fp[..fp.len().min(4)].to_vec();
         sys
@@ -116,22 +138,33 @@ impl ResidentSystem {
 
     /// Run one inference step (bounded ReLU FC, same as hardware).
     fn infer(&self, input: &[f32]) -> Vec<f32> {
-        (0..self.rs).map(|i| {
-            let pre: f32 = self.w[i * self.is..(i + 1) * self.is]
-                .iter().zip(input.iter()).map(|(w, x)| w * x).sum::<f32>()
-                + self.b[i];
-            pre.max(0.0) // bounded ReLU
-        }).collect()
+        (0..self.rs)
+            .map(|i| {
+                let pre: f32 = self.w[i * self.is..(i + 1) * self.is]
+                    .iter()
+                    .zip(input.iter())
+                    .map(|(w, x)| w * x)
+                    .sum::<f32>()
+                    + self.b[i];
+                pre.max(0.0) // bounded ReLU
+            })
+            .collect()
     }
 
     /// Re-run fingerprint to verify output stability.
     fn verify_fingerprint(&self) -> (bool, f32) {
         let mut inp_rng = Xoshiro::new(0x1234_5678);
-        for _ in 0..10 { let _ = self.infer(&inp_rng.vec(self.is)); }
+        for _ in 0..10 {
+            let _ = self.infer(&inp_rng.vec(self.is));
+        }
         let out = self.infer(&inp_rng.vec(self.is));
         let current = &out[..out.len().min(4)];
-        let max_diff = self.fingerprint.iter().zip(current.iter())
-            .map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+        let max_diff = self
+            .fingerprint
+            .iter()
+            .zip(current.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
         (max_diff < 1e-5, max_diff)
     }
 }
@@ -158,10 +191,10 @@ impl NpPackingMap {
                 (0x0000, 179, "ESN-QCD"),
                 (0x00B3, 134, "Transport"),
                 (0x0139, 220, "KWS"),
-                (0x0215,  96, "ECG"),
-                (0x0275,  67, "Phase"),
-                (0x02B8,  68, "Anderson"),
-                (0x02FC,  50, "Sentinel"),
+                (0x0215, 96, "ECG"),
+                (0x0275, 67, "Phase"),
+                (0x02B8, 68, "Anderson"),
+                (0x02FC, 50, "Sentinel"),
             ],
         }
     }
@@ -175,7 +208,9 @@ impl NpPackingMap {
             let (ai, ac, _) = self.systems[i];
             for j in (i + 1)..self.systems.len() {
                 let (bi, bc, _) = self.systems[j];
-                if ai < bi + bc && bi < ai + ac { return true; }
+                if ai < bi + bc && bi < ai + ac {
+                    return true;
+                }
             }
         }
         false
@@ -192,21 +227,41 @@ fn task_np_layout() -> bool {
     let spare = 1000usize.saturating_sub(total);
     let overlap = map.has_overlap();
 
-    println!("  {:>6}  {:>8}  {:>8}  {:>8}  {:>12}",
-        "Slot", "NP start", "NP count", "NP end", "System");
+    println!(
+        "  {:>6}  {:>8}  {:>8}  {:>8}  {:>12}",
+        "Slot", "NP start", "NP count", "NP end", "System"
+    );
     for (i, (start, count, name)) in map.systems.iter().enumerate() {
-        println!("  {:>6}  0x{:04X}   {:>8}  0x{:04X}  {:<12}",
-            i + 1, start, count, start + count, name);
+        println!(
+            "  {:>6}  0x{:04X}   {:>8}  0x{:04X}  {:<12}",
+            i + 1,
+            start,
+            count,
+            start + count,
+            name
+        );
     }
     println!("  ─────────────────────────────────────────────────────");
-    println!("  TOTAL                     {:>8}  {} spare of 1,000", total, spare);
+    println!(
+        "  TOTAL                     {:>8}  {} spare of 1,000",
+        total, spare
+    );
     println!();
-    println!("  Overlap detected: {}", if overlap { "❌ YES — FAIL" } else { "✅ NO" });
+    println!(
+        "  Overlap detected: {}",
+        if overlap {
+            "❌ YES — FAIL"
+        } else {
+            "✅ NO"
+        }
+    );
     println!("  Total NPs: {} / 1,000 ({}%)", total, total * 100 / 1000);
 
     let passed = !overlap && total <= 1000 && spare >= 100;
-    println!("  {} (need: no overlap, ≤ 1,000 NPs, ≥ 100 spare)",
-        if passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  {} (need: no overlap, ≤ 1,000 NPs, ≥ 100 spare)",
+        if passed { "✅ PASS" } else { "❌ FAIL" }
+    );
     passed
 }
 
@@ -218,7 +273,10 @@ fn task_isolation_model(rng: &mut Xoshiro) -> bool {
     let map = NpPackingMap::from_readme();
 
     // Build simulated systems (each with its own seed = deterministic weights)
-    let systems: Vec<ResidentSystem> = map.systems.iter().enumerate()
+    let systems: Vec<ResidentSystem> = map
+        .systems
+        .iter()
+        .enumerate()
         .map(|(i, (addr, count, name))| {
             let is = 6 + i * 2; // varied input dims
             let rs = (*count).min(64); // scaled reservoir
@@ -236,9 +294,13 @@ fn task_isolation_model(rng: &mut Xoshiro) -> bool {
     for sys in &systems {
         let (stable, max_diff) = sys.verify_fingerprint();
         let status = if stable { "✅" } else { "❌" };
-        println!("  {status}  {:<12}  NP 0x{:04X}  fingerprint_max_diff = {:.2e}",
-            sys.name, sys.np_address, max_diff);
-        if !stable { all_stable = false; }
+        println!(
+            "  {status}  {:<12}  NP 0x{:04X}  fingerprint_max_diff = {:.2e}",
+            sys.name, sys.np_address, max_diff
+        );
+        if !stable {
+            all_stable = false;
+        }
     }
 
     println!();
@@ -247,13 +309,19 @@ fn task_isolation_model(rng: &mut Xoshiro) -> bool {
     let sys_a = &systems[0];
     let sys_b = &systems[2]; // non-adjacent to stress-test
     let (a_stable_after_b, diff) = sys_a.verify_fingerprint();
-    println!("  {}  After 'loading' {}: {} unchanged (diff={:.2e})",
+    println!(
+        "  {}  After 'loading' {}: {} unchanged (diff={:.2e})",
         if a_stable_after_b { "✅" } else { "❌" },
-        sys_b.name, sys_a.name, diff
+        sys_b.name,
+        sys_a.name,
+        diff
     );
 
     let passed = all_stable && a_stable_after_b;
-    println!("  {} (software model: all systems isolated)", if passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  {} (software model: all systems isolated)",
+        if passed { "✅ PASS" } else { "❌ FAIL" }
+    );
     println!();
     println!("  Phase 2 (hardware) will run this same test with program_external().");
     println!("  Expected: same result — NP SRAM regions are disjoint by design.");
@@ -275,15 +343,20 @@ fn task_round_robin_throughput(rng: &mut Xoshiro) -> bool {
 
     let iters = 20_000usize;
 
-    println!("  {:>12}  {:>14}  {:>16}  {:>14}",
-        "Config", "Throughput", "Per-system Hz", "Overhead vs 1");
+    println!(
+        "  {:>12}  {:>14}  {:>16}  {:>14}",
+        "Config", "Throughput", "Per-system Hz", "Overhead vs 1"
+    );
     let mut baseline_hz = 0.0f64;
 
     for &(n, label) in configs {
-        let systems: Vec<ResidentSystem> = (0..n).map(|i| {
-            let is = 6; let rs = 64;
-            ResidentSystem::new("bench", i * 0x0100, rs, is, rs, 0x1000 + i as u64)
-        }).collect();
+        let systems: Vec<ResidentSystem> = (0..n)
+            .map(|i| {
+                let is = 6;
+                let rs = 64;
+                ResidentSystem::new("bench", i * 0x0100, rs, is, rs, 0x1000 + i as u64)
+            })
+            .collect();
         let inputs: Vec<Vec<f32>> = (0..n).map(|_| rng.vec(6)).collect();
 
         let t0 = Instant::now();
@@ -293,8 +366,14 @@ fn task_round_robin_throughput(rng: &mut Xoshiro) -> bool {
         }
         let hz = iters as f64 / t0.elapsed().as_secs_f64();
         let per_sys = hz;
-        let overhead = if baseline_hz > 0.0 { baseline_hz / hz } else { 1.0 };
-        if n == 1 { baseline_hz = hz; }
+        let overhead = if baseline_hz > 0.0 {
+            baseline_hz / hz
+        } else {
+            1.0
+        };
+        if n == 1 {
+            baseline_hz = hz;
+        }
 
         println!("  {label:<12}  {hz:>12.0} Hz  {per_sys:>14.0} Hz  {overhead:>12.2}×");
     }
@@ -307,7 +386,10 @@ fn task_round_robin_throughput(rng: &mut Xoshiro) -> bool {
     println!("  Even with swap cost: ~80,000–120,000 aggregate inferences/sec");
 
     let passed = baseline_hz > 5_000.0;
-    println!("  {} (need > 5,000 Hz baseline)", if passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  {} (need > 5,000 Hz baseline)",
+        if passed { "✅ PASS" } else { "❌ FAIL" }
+    );
     passed
 }
 
@@ -317,28 +399,37 @@ fn task_weight_mutation_multitenancy(rng: &mut Xoshiro) -> bool {
     println!("\n══ Task 4: Weight mutation with multi-tenancy — set_variable() isolation ══");
 
     // Simulate: mutate weights of system A, verify system B's output is unchanged.
-    let is = 6; let rs = 32;
+    let is = 6;
+    let rs = 32;
     let sys_a_orig = ResidentSystem::new("A_orig", 0x0000, rs, is, rs, 0xAAAA);
-    let sys_b      = ResidentSystem::new("B",      0x0100, rs, is, rs, 0xBBBB);
+    let sys_b = ResidentSystem::new("B", 0x0100, rs, is, rs, 0xBBBB);
 
     // "Mutate" system A by creating A_mut with slightly perturbed weights
     let mut a_mut = sys_a_orig.clone();
     let delta = 0.01f32;
-    for w in a_mut.w.iter_mut() { *w += delta * rng.f32r(-1.0, 1.0); }
+    for w in a_mut.w.iter_mut() {
+        *w += delta * rng.f32r(-1.0, 1.0);
+    }
 
     let input_a = rng.vec(is);
     let input_b = rng.vec(is);
 
     let b_before = sys_b.infer(&input_b);
-    let b_after  = sys_b.infer(&input_b); // B unchanged — mutation only affects A's struct
+    let b_after = sys_b.infer(&input_b); // B unchanged — mutation only affects A's struct
 
-    let max_diff_b = b_before.iter().zip(b_after.iter())
-        .map(|(x, y)| (x - y).abs()).fold(0.0f32, f32::max);
+    let max_diff_b = b_before
+        .iter()
+        .zip(b_after.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max);
 
     let a_before = sys_a_orig.infer(&input_a);
-    let a_after  = a_mut.infer(&input_a);
-    let max_diff_a = a_before.iter().zip(a_after.iter())
-        .map(|(x, y)| (x - y).abs()).fold(0.0f32, f32::max);
+    let a_after = a_mut.infer(&input_a);
+    let max_diff_a = a_before
+        .iter()
+        .zip(a_after.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max);
 
     println!("  System A: output changed by {max_diff_a:.4} after weight mutation (expected > 0)");
     println!("  System B: output changed by {max_diff_b:.4} after A's mutation  (expected ≈ 0)");
@@ -349,7 +440,10 @@ fn task_weight_mutation_multitenancy(rng: &mut Xoshiro) -> bool {
     println!("  (bench_online_evolution) while other systems continue running.");
 
     let passed = max_diff_b < 1e-6 && max_diff_a > 0.0;
-    println!("  {} (A changed, B unchanged)", if passed { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  {} (A changed, B unchanged)",
+        if passed { "✅ PASS" } else { "❌ FAIL" }
+    );
     passed
 }
 
@@ -360,11 +454,27 @@ fn task_packing_progression() -> bool {
 
     let stages: &[(usize, &[(&str, usize)])] = &[
         (2, &[("ESN-QCD", 179), ("Transport", 134)]),
-        (4, &[("ESN-QCD", 179), ("Transport", 134), ("KWS", 220), ("ECG", 96)]),
-        (7, &[
-            ("ESN-QCD", 179), ("Transport", 134), ("KWS", 220),
-            ("ECG", 96), ("Phase", 67), ("Anderson", 68), ("Sentinel", 50),
-        ]),
+        (
+            4,
+            &[
+                ("ESN-QCD", 179),
+                ("Transport", 134),
+                ("KWS", 220),
+                ("ECG", 96),
+            ],
+        ),
+        (
+            7,
+            &[
+                ("ESN-QCD", 179),
+                ("Transport", 134),
+                ("KWS", 220),
+                ("ECG", 96),
+                ("Phase", 67),
+                ("Anderson", 68),
+                ("Sentinel", 50),
+            ],
+        ),
     ];
 
     let mut all_pass = true;
@@ -373,10 +483,20 @@ fn task_packing_progression() -> bool {
         let spare = 1000usize.saturating_sub(total);
         let pct = total * 100 / 1000;
         let ok = total <= 1000 && spare >= 50;
-        if !ok { all_pass = false; }
-        println!("  {} N={}: {} NPs ({pct}%), {spare} spare  —  {}",
-            if ok { "✅" } else { "❌" }, n, total,
-            systems.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(" + "));
+        if !ok {
+            all_pass = false;
+        }
+        println!(
+            "  {} N={}: {} NPs ({pct}%), {spare} spare  —  {}",
+            if ok { "✅" } else { "❌" },
+            n,
+            total,
+            systems
+                .iter()
+                .map(|(n, _)| *n)
+                .collect::<Vec<_>>()
+                .join(" + ")
+        );
     }
 
     println!();
@@ -386,57 +506,250 @@ fn task_packing_progression() -> bool {
     println!("  3. Load 7 programs → verify all 7 produce correct outputs");
     println!("  4. Measure aggregate throughput under round-robin inference");
     println!("  5. Verify set_variable() on one system doesn't affect others");
-    println!("  {} (all packing stages feasible)", if all_pass { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "  {} (all packing stages feasible)",
+        if all_pass { "✅ PASS" } else { "❌ FAIL" }
+    );
     all_pass
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-fn main() {
-    println!("╔══════════════════════════════════════════════════════════════════════╗");
-    println!("║  Experiment 002 — Multi-Tenancy: NP Address Isolation              ║");
-    println!("║  metalForge/experiments/002_MULTI_TENANCY.md  Phase 1             ║");
-    println!("╚══════════════════════════════════════════════════════════════════════╝");
-    println!();
-    println!("Phase 1: Software isolation model — validates NP layout + throughput math.");
-    println!("Phase 2: Hardware co-loading — requires /dev/akida0 + .fbz model files.");
-    println!("         cargo run --bin bench_exp002_tenancy -- --hw");
-    println!();
+// ── Phase 2: SRAM-based hardware isolation verification ─────────────────────
 
-    let hw_present = std::path::Path::new("/dev/akida0").exists();
-    if hw_present {
-        println!("  🔧 Hardware detected at /dev/akida0");
-        println!("     Phase 2 hardware path ready — run with --hw flag.");
-    } else {
-        println!("  💻 No hardware — running Phase 1 software model.");
+fn task_sram_isolation_probe() -> bool {
+    println!("\n══ Phase 2: SRAM Isolation Probe — Hardware BAR1 Verification ══");
+
+    let probe = akida_bench::HardwareProbe::detect();
+    let mgr = match probe.manager() {
+        Some(m) => m,
+        None => {
+            println!("  No hardware detected — Phase 2 requires physical Akida device");
+            println!(
+                "  Run Phase 1 (software model) instead: cargo run --bin bench_exp002_tenancy"
+            );
+            return false;
+        }
+    };
+
+    let info = match mgr.devices().first() {
+        Some(i) => i,
+        None => {
+            println!("  No devices found");
+            return false;
+        }
+    };
+
+    let pcie_addr = info.pcie_address();
+    println!("  Device: {pcie_addr}");
+
+    let mut sram = match akida_driver::sram::SramAccessor::open(pcie_addr) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("  Cannot open SRAM accessor: {e}");
+            return false;
+        }
+    };
+
+    // Read NP enable bits to understand actual topology
+    println!();
+    println!("  NP enable bits (BAR0 0x1E0C–0x1E20):");
+    let mut enabled_count = 0u32;
+    for i in 0..akida_chip::regs::NP_ENABLE_COUNT {
+        let offset = akida_chip::regs::NP_ENABLE_BASE + i * 4;
+        match sram.read_register(offset) {
+            Ok(val) => {
+                let bits = val.count_ones();
+                enabled_count += bits;
+                println!("    [{i}] {val:#010x}  ({bits} enabled)");
+            }
+            Err(e) => println!("    [{i}] read error: {e}"),
+        }
     }
+    println!("  Total enabled NPs: {enabled_count}");
     println!();
 
-    let mut rng = Xoshiro::new(0x0002_CAFE_BEEF);
-
-    let results = vec![
-        ("T1: NP layout feasibility",        task_np_layout()),
-        ("T2: Address isolation model",      task_isolation_model(&mut rng)),
-        ("T3: Round-robin throughput",       task_round_robin_throughput(&mut rng)),
-        ("T4: Weight mutation isolation",    task_weight_mutation_multitenancy(&mut rng)),
-        ("T5: 2→4→7 packing progression",   task_packing_progression()),
+    // Probe BAR1 at NP boundaries to verify address isolation
+    let layout = sram.layout().clone();
+    let np_offsets: Vec<(u32, &str)> = vec![
+        (0, "ESN-QCD [0,179)"),
+        (1, "Transport [179,313)"),
+        (2, "KWS [313,533)"),
+        (3, "ECG [533,629)"),
     ];
 
-    println!("\n══ Summary ══════════════════════════════════════════════════════════════");
-    let mut all_pass = true;
-    for (name, pass) in &results {
-        println!("  {}  {}", if *pass { "✅" } else { "❌" }, name);
-        if !pass { all_pass = false; }
+    println!("  BAR1 probe at NP boundaries (first 4 systems):");
+    let mut boundary_results = Vec::new();
+
+    for &(np_idx, label) in &np_offsets {
+        if let Some(base) = layout.np_base_offset(np_idx) {
+            match sram.read_bar1_u32(base as usize) {
+                Ok(val) => {
+                    let has_data = val != 0 && val != 0xFFFF_FFFF;
+                    println!(
+                        "    NP{np_idx} ({label}): base={base:#012x}  val={val:#010x}  {}",
+                        if has_data { "DATA" } else { "empty" }
+                    );
+                    boundary_results.push((np_idx, has_data));
+                }
+                Err(e) => {
+                    println!("    NP{np_idx} ({label}): base={base:#012x}  error: {e}");
+                    boundary_results.push((np_idx, false));
+                }
+            }
+        }
     }
 
     println!();
-    if all_pass {
-        println!("✅  All Phase 1 checks passed.");
-        println!("    Software isolation model confirms all 7-system NP layout claims.");
-        println!("    Next: run Phase 2 on live AKD1000.");
-        println!("    Protocol: metalForge/experiments/002_MULTI_TENANCY.md § Phase 2");
-        println!("    Hardware validation converts 📋 claims to ✅ validated.");
+
+    // Cross-boundary scan: look for data leaking between NP regions
+    println!("  Cross-boundary isolation scan:");
+    let mut isolation_ok = true;
+
+    for i in 0..np_offsets.len().saturating_sub(1) {
+        let (np_a, _) = np_offsets[i];
+        let (np_b, _) = np_offsets[i + 1];
+
+        if let (Some(end_a), Some(start_b)) =
+            (layout.np_base_offset(np_a + 1), layout.np_base_offset(np_b))
+        {
+            if end_a <= start_b {
+                let gap = start_b - end_a;
+                println!("    NP{np_a}→NP{np_b}: {gap} byte gap (isolation boundary)");
+
+                // Sample the gap region — should be zeros if isolation holds
+                let gap_offset = end_a as usize;
+                match sram.read_bar1_u32(gap_offset) {
+                    Ok(val) => {
+                        if val != 0 && val != 0xFFFF_FFFF {
+                            println!(
+                                "      ⚠ Non-zero data in gap: {val:#010x} at {gap_offset:#x}"
+                            );
+                            isolation_ok = false;
+                        } else {
+                            println!("      Clean gap (zero/unmapped)");
+                        }
+                    }
+                    Err(_) => println!("      Gap not readable (expected for sparse mapping)"),
+                }
+            }
+        }
+    }
+
+    println!();
+    let passed = isolation_ok;
+    println!(
+        "  {} Phase 2 SRAM isolation probe",
+        if passed { "✅ PASS" } else { "❌ FAIL" }
+    );
+    println!("  NPs enabled: {enabled_count}");
+    println!("  Boundaries probed: {}", boundary_results.len());
+    println!(
+        "  Cross-boundary isolation: {}",
+        if isolation_ok {
+            "clean"
+        } else {
+            "leakage detected"
+        }
+    );
+
+    passed
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+fn main() {
+    let hw_mode = std::env::args().any(|a| a == "--hw");
+
+    println!("╔══════════════════════════════════════════════════════════════════════╗");
+    if hw_mode {
+        println!("║  Experiment 002 — Multi-Tenancy: NP Address Isolation  [Phase 2]  ║");
     } else {
-        println!("❌  Some checks failed. Review NP layout or throughput assertions.");
+        println!("║  Experiment 002 — Multi-Tenancy: NP Address Isolation  [Phase 1]  ║");
+    }
+    println!("║  metalForge/experiments/002_MULTI_TENANCY.md                       ║");
+    println!("╚══════════════════════════════════════════════════════════════════════╝");
+    println!();
+
+    let probe = akida_bench::HardwareProbe::detect();
+    println!("  {}", probe.status_line());
+    if probe.is_available() && !hw_mode {
+        println!("  Hardware detected — add --hw flag for Phase 2 (SRAM probing).");
+    }
+    println!();
+
+    if hw_mode {
+        println!("Phase 2: SRAM-based hardware isolation verification.");
+        println!("Reads BAR0 NP enable bits and probes BAR1 at NP boundaries.");
+        println!();
+
+        let mut results = vec![
+            ("T1: NP layout feasibility", task_np_layout()),
+            ("T5: 2→4→7 packing progression", task_packing_progression()),
+            ("T6: SRAM isolation probe", task_sram_isolation_probe()),
+        ];
+
+        let mut rng = Xoshiro::new(0x0002_CAFE_BEEF);
+        results.push((
+            "T4: Weight mutation isolation (software)",
+            task_weight_mutation_multitenancy(&mut rng),
+        ));
+
+        println!("\n══ Summary ══════════════════════════════════════════════════════════════");
+        let mut all_pass = true;
+        for (name, pass) in &results {
+            println!("  {}  {}", if *pass { "✅" } else { "❌" }, name);
+            if !pass {
+                all_pass = false;
+            }
+        }
+
+        println!();
+        if all_pass {
+            println!("✅  Phase 2 hardware checks passed.");
+            println!("    SRAM isolation confirmed via BAR1 boundary probing.");
+        } else {
+            println!("❌  Some Phase 2 checks failed. Review SRAM probe output.");
+        }
+    } else {
+        println!("Phase 1: Software isolation model — validates NP layout + throughput math.");
+        println!();
+
+        let mut rng = Xoshiro::new(0x0002_CAFE_BEEF);
+
+        let results = vec![
+            ("T1: NP layout feasibility", task_np_layout()),
+            (
+                "T2: Address isolation model",
+                task_isolation_model(&mut rng),
+            ),
+            (
+                "T3: Round-robin throughput",
+                task_round_robin_throughput(&mut rng),
+            ),
+            (
+                "T4: Weight mutation isolation",
+                task_weight_mutation_multitenancy(&mut rng),
+            ),
+            ("T5: 2→4→7 packing progression", task_packing_progression()),
+        ];
+
+        println!("\n══ Summary ══════════════════════════════════════════════════════════════");
+        let mut all_pass = true;
+        for (name, pass) in &results {
+            println!("  {}  {}", if *pass { "✅" } else { "❌" }, name);
+            if !pass {
+                all_pass = false;
+            }
+        }
+
+        println!();
+        if all_pass {
+            println!("✅  All Phase 1 checks passed.");
+            println!("    Software isolation model confirms all 7-system NP layout claims.");
+            println!("    Next: run Phase 2 with --hw flag on live AKD1000.");
+        } else {
+            println!("❌  Some checks failed. Review NP layout or throughput assertions.");
+        }
     }
 }

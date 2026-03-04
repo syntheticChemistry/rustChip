@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! ESN Substrate Comparison Benchmark
 //!
@@ -82,12 +82,22 @@ fn main() -> Result<()> {
 
     // ─── 2. Train CPU-f64 ESN ─────────────────────────────────────────────────
     println!("Training CPU-f64 ESN (RS={RESERVOIR_SIZE})...");
-    let mut cpu_esn = CpuEsn::new(RESERVOIR_SIZE, INPUT_SIZE, OUTPUT_SIZE, LEAK_RATE as f64,
-                                   SPECTRAL_RADIUS, CONNECTIVITY, SEED);
+    let mut cpu_esn = CpuEsn::new(
+        RESERVOIR_SIZE,
+        INPUT_SIZE,
+        OUTPUT_SIZE,
+        LEAK_RATE as f64,
+        SPECTRAL_RADIUS,
+        CONNECTIVITY,
+        SEED,
+    );
     cpu_esn.train(&train_inputs, &train_targets);
     let cpu_weights = cpu_esn.export_f32();
 
-    println!("  Reservoir spectral radius : {:.4}", cpu_esn.measured_spectral_radius());
+    println!(
+        "  Reservoir spectral radius : {:.4}",
+        cpu_esn.measured_spectral_radius()
+    );
     println!("  Training sequences        : {}", train_inputs.len());
     println!("  w_in  : {} floats", cpu_weights.w_in.len());
     println!("  w_res : {} floats", cpu_weights.w_res.len());
@@ -119,7 +129,14 @@ fn main() -> Result<()> {
     println!("  Mean |Δ|             : {:.6}", parity.mean_abs);
     println!("  Max |Δ|/|CPU|        : {:.4}%", parity.max_rel * 100.0);
     let parity_ok = parity.max_rel < 0.02; // <2% relative error for f64→f32
-    println!("  f64→f32 precision    : {}", if parity_ok { "✓ OK (<2%)" } else { "✗ FAIL (>2%)" });
+    println!(
+        "  f64→f32 precision    : {}",
+        if parity_ok {
+            "✓ OK (<2%)"
+        } else {
+            "✗ FAIL (>2%)"
+        }
+    );
     println!();
 
     // ─── 6. Hardware benchmark (optional) ─────────────────────────────────────
@@ -142,7 +159,14 @@ fn main() -> Result<()> {
                 println!("  Mean |Δ|             : {:.6}", hw_parity.mean_abs);
                 println!("  Max |Δ|/|SW|         : {:.4}%", hw_parity.max_rel * 100.0);
                 let hw_ok = hw_parity.max_rel < 0.05;
-                println!("  f32→int4 precision   : {}", if hw_ok { "✓ OK (<5%)" } else { "✗ FAIL (>5%)" });
+                println!(
+                    "  f32→int4 precision   : {}",
+                    if hw_ok {
+                        "✓ OK (<5%)"
+                    } else {
+                        "✗ FAIL (>5%)"
+                    }
+                );
                 println!();
                 print_substrate_summary(&cpu_results, &sw_results, Some(&hw_results));
             }
@@ -207,7 +231,11 @@ fn bench_cpu_f64(esn: &mut CpuEsn, test_inputs: &[Vec<f64>], iters: usize) -> Be
 
 // ─── SoftwareBackend benchmark ────────────────────────────────────────────────
 
-fn bench_software(sw: &mut SoftwareBackend, test_inputs: &[Vec<f64>], iters: usize) -> BenchResults {
+fn bench_software(
+    sw: &mut SoftwareBackend,
+    test_inputs: &[Vec<f64>],
+    iters: usize,
+) -> BenchResults {
     let mut latencies = Vec::with_capacity(iters);
     let mut outputs = Vec::with_capacity(test_inputs.len());
 
@@ -238,21 +266,29 @@ fn bench_software(sw: &mut SoftwareBackend, test_inputs: &[Vec<f64>], iters: usi
 
 // ─── Hardware benchmark ────────────────────────────────────────────────────────
 
-fn bench_hardware(weights: &ExportedWeightsF32, test_inputs: &[Vec<f64>], iters: usize)
-    -> Result<BenchResults>
-{
+fn bench_hardware(
+    weights: &ExportedWeightsF32,
+    test_inputs: &[Vec<f64>],
+    iters: usize,
+) -> Result<BenchResults> {
     let mgr = DeviceManager::discover()?;
     let mut device = mgr.open_first()?;
 
-    let input_bytes: Vec<u8> = test_inputs[0].iter()
+    let input_bytes: Vec<u8> = test_inputs[0]
+        .iter()
         .flat_map(|&x| (x as f32).to_le_bytes())
         .collect();
     let output_size = OUTPUT_SIZE * 4;
 
     // Load weights (via software model blob as reference)
     let blob = pack_software_model(
-        RESERVOIR_SIZE, INPUT_SIZE, OUTPUT_SIZE, LEAK_RATE,
-        &weights.w_in, &weights.w_res, &weights.w_out,
+        RESERVOIR_SIZE,
+        INPUT_SIZE,
+        OUTPUT_SIZE,
+        LEAK_RATE,
+        &weights.w_in,
+        &weights.w_res,
+        &weights.w_out,
     );
     device.write(&blob)?;
 
@@ -276,9 +312,7 @@ fn bench_hardware(weights: &ExportedWeightsF32, test_inputs: &[Vec<f64>], iters:
     // Collect outputs for parity
     let mut outputs = Vec::with_capacity(test_inputs.len());
     for inp in test_inputs {
-        let inp_bytes: Vec<u8> = inp.iter()
-            .flat_map(|&x| (x as f32).to_le_bytes())
-            .collect();
+        let inp_bytes: Vec<u8> = inp.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect();
         device.write(&inp_bytes)?;
         device.read(&mut out_buf)?;
         let val = f32::from_le_bytes(out_buf[0..4].try_into().unwrap_or([0u8; 4]));
@@ -291,18 +325,18 @@ fn bench_hardware(weights: &ExportedWeightsF32, test_inputs: &[Vec<f64>], iters:
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 fn print_results(r: &BenchResults) {
-    println!("  Throughput : {:>10.0} Hz  ({:.0} KHz)", r.throughput_hz, r.throughput_hz / 1000.0);
+    println!(
+        "  Throughput : {:>10.0} Hz  ({:.0} KHz)",
+        r.throughput_hz,
+        r.throughput_hz / 1000.0
+    );
     println!("  Latency p50: {:>10.1} µs", r.latency_p50_us);
     println!("  Latency p95: {:>10.1} µs", r.latency_p95_us);
     println!("  Latency p99: {:>10.1} µs", r.latency_p99_us);
     println!("  Latency min: {:>10.1} µs", r.latency_min_us);
 }
 
-fn print_substrate_summary(
-    cpu: &BenchResults,
-    sw: &BenchResults,
-    hw: Option<&BenchResults>,
-) {
+fn print_substrate_summary(cpu: &BenchResults, sw: &BenchResults, hw: Option<&BenchResults>) {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Substrate Summary");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -316,26 +350,36 @@ fn print_substrate_summary(
     );
     println!(
         "{:<35} {:>10.0} Hz  {:>8.1} µs  [{:.0}× vs CPU]",
-        sw.substrate, sw.throughput_hz, sw.latency_p50_us,
+        sw.substrate,
+        sw.throughput_hz,
+        sw.latency_p50_us,
         sw.throughput_hz / cpu_hz
     );
     if let Some(hw) = hw {
         println!(
             "{:<35} {:>10.0} Hz  {:>8.1} µs  [{:.0}× vs CPU, energy 1.4 µJ]",
-            hw.substrate, hw.throughput_hz, hw.latency_p50_us,
+            hw.substrate,
+            hw.throughput_hz,
+            hw.latency_p50_us,
             hw.throughput_hz / cpu_hz
         );
         let speedup_for_energy = cpu.throughput_hz / hw.throughput_hz * (50.0 / 1.4);
         println!();
-        println!("  Energy per inference  CPU ~50 µJ  |  NPU ~1.4 µJ  [{:.0}× NPU advantage]",
-                 speedup_for_energy);
+        println!(
+            "  Energy per inference  CPU ~50 µJ  |  NPU ~1.4 µJ  [{:.0}× NPU advantage]",
+            speedup_for_energy
+        );
     }
 }
 
 fn compute_parity(a: &[f64], b: &[f64]) -> Parity {
     let n = a.len().min(b.len());
     if n == 0 {
-        return Parity { max_abs: 0.0, mean_abs: 0.0, max_rel: 0.0 };
+        return Parity {
+            max_abs: 0.0,
+            mean_abs: 0.0,
+            max_rel: 0.0,
+        };
     }
     let mut max_abs = 0.0f64;
     let mut sum_abs = 0.0f64;
@@ -343,11 +387,19 @@ fn compute_parity(a: &[f64], b: &[f64]) -> Parity {
     for (&av, &bv) in a.iter().zip(b.iter()).take(n) {
         let diff = (av - bv).abs();
         let rel = diff / av.abs().max(1e-10);
-        if diff > max_abs { max_abs = diff; }
-        if rel  > max_rel { max_rel = rel;  }
+        if diff > max_abs {
+            max_abs = diff;
+        }
+        if rel > max_rel {
+            max_rel = rel;
+        }
         sum_abs += diff;
     }
-    Parity { max_abs, mean_abs: sum_abs / n as f64, max_rel }
+    Parity {
+        max_abs,
+        mean_abs: sum_abs / n as f64,
+        max_rel,
+    }
 }
 
 fn make_results(substrate: &'static str, latencies_us: &[f64], outputs: Vec<f64>) -> BenchResults {
@@ -369,7 +421,7 @@ fn make_results(substrate: &'static str, latencies_us: &[f64], outputs: Vec<f64>
 // ─── CPU-f64 ESN (self-contained, no external crate) ─────────────────────────
 
 struct ExportedWeightsF32 {
-    w_in:  Vec<f32>,
+    w_in: Vec<f32>,
     w_res: Vec<f32>,
     w_out: Vec<f32>,
 }
@@ -379,7 +431,7 @@ struct CpuEsn {
     is: usize,
     os: usize,
     leak_rate: f64,
-    w_in:  Vec<Vec<f64>>,
+    w_in: Vec<Vec<f64>>,
     w_res: Vec<Vec<f64>>,
     w_out: Option<Vec<Vec<f64>>>,
     state: Vec<f64>,
@@ -392,24 +444,49 @@ impl CpuEsn {
             .map(|_| (0..is).map(|_| rng.uniform() - 0.5).collect())
             .collect();
         let mut w_res: Vec<Vec<f64>> = (0..rs)
-            .map(|_| (0..rs)
-                .map(|_| if rng.uniform() < conn { rng.normal() } else { 0.0 })
-                .collect())
+            .map(|_| {
+                (0..rs)
+                    .map(|_| {
+                        if rng.uniform() < conn {
+                            rng.normal()
+                        } else {
+                            0.0
+                        }
+                    })
+                    .collect()
+            })
             .collect();
         let msr = spectral_radius(&w_res);
         if msr > 1e-10 {
             let scale = sr / msr;
-            for row in &mut w_res { for v in row.iter_mut() { *v *= scale; } }
+            for row in &mut w_res {
+                for v in row.iter_mut() {
+                    *v *= scale;
+                }
+            }
         }
-        Self { rs, is, os, leak_rate: leak, w_in, w_res, w_out: None, state: vec![0.0; rs] }
+        Self {
+            rs,
+            is,
+            os,
+            leak_rate: leak,
+            w_in,
+            w_res,
+            w_out: None,
+            state: vec![0.0; rs],
+        }
     }
 
     fn step(&mut self, input: &[f64]) {
         let mut pre = vec![0.0f64; self.rs];
         for i in 0..self.rs {
             let mut v = 0.0;
-            for j in 0..self.is.min(input.len()) { v += self.w_in[i][j] * input[j]; }
-            for j in 0..self.rs               { v += self.w_res[i][j] * self.state[j]; }
+            for j in 0..self.is.min(input.len()) {
+                v += self.w_in[i][j] * input[j];
+            }
+            for j in 0..self.rs {
+                v += self.w_res[i][j] * self.state[j];
+            }
             pre[i] = v;
         }
         let a = self.leak_rate;
@@ -420,7 +497,9 @@ impl CpuEsn {
 
     fn collect_state(&mut self, inputs: &[Vec<f64>]) -> Vec<f64> {
         self.state.fill(0.0);
-        for inp in inputs { self.step(inp); }
+        for inp in inputs {
+            self.step(inp);
+        }
         self.state.clone()
     }
 
@@ -435,30 +514,55 @@ impl CpuEsn {
         // Ridge regression W_out = Y^T X (X^T X + λI)^{-1}
         let lambda = 1e-4_f64;
         let mut xtx = vec![vec![0.0f64; rs]; rs];
-        for i in 0..rs { for j in 0..rs {
-            xtx[i][j] = x.iter().take(n).map(|r| r[i] * r[j]).sum::<f64>();
-        } xtx[i][i] += lambda; }
+        for i in 0..rs {
+            for j in 0..rs {
+                xtx[i][j] = x.iter().take(n).map(|r| r[i] * r[j]).sum::<f64>();
+            }
+            xtx[i][i] += lambda;
+        }
         let mut xty = vec![vec![0.0f64; os]; rs];
-        for i in 0..rs { for j in 0..os {
-            xty[i][j] = x.iter().zip(targets.iter()).take(n).map(|(r, t)| r[i] * t[j]).sum();
-        } }
+        for i in 0..rs {
+            for j in 0..os {
+                xty[i][j] = x
+                    .iter()
+                    .zip(targets.iter())
+                    .take(n)
+                    .map(|(r, t)| r[i] * t[j])
+                    .sum();
+            }
+        }
         let w_out_t = solve_lu(&xtx, &xty);
         let mut w_out = vec![vec![0.0; rs]; os];
-        for i in 0..os { for j in 0..rs { w_out[i][j] = w_out_t[j][i]; } }
+        for i in 0..os {
+            for j in 0..rs {
+                w_out[i][j] = w_out_t[j][i];
+            }
+        }
         self.w_out = Some(w_out);
     }
 
     fn predict(&mut self, seq: &[Vec<f64>]) -> Vec<f64> {
         let state = self.collect_state(seq);
         let w = self.w_out.as_ref().expect("train first");
-        w.iter().map(|row| row.iter().zip(state.iter()).map(|(a, b)| a * b).sum()).collect()
+        w.iter()
+            .map(|row| row.iter().zip(state.iter()).map(|(a, b)| a * b).sum())
+            .collect()
     }
 
     fn export_f32(&self) -> ExportedWeightsF32 {
-        let w_in  = self.w_in.iter().flat_map(|r| r.iter().map(|&v| v as f32)).collect();
-        let w_res = self.w_res.iter().flat_map(|r| r.iter().map(|&v| v as f32)).collect();
-        let w_out = self.w_out.as_ref().map_or(vec![], |w|
-            w.iter().flat_map(|r| r.iter().map(|&v| v as f32)).collect());
+        let w_in = self
+            .w_in
+            .iter()
+            .flat_map(|r| r.iter().map(|&v| v as f32))
+            .collect();
+        let w_res = self
+            .w_res
+            .iter()
+            .flat_map(|r| r.iter().map(|&v| v as f32))
+            .collect();
+        let w_out = self.w_out.as_ref().map_or(vec![], |w| {
+            w.iter().flat_map(|r| r.iter().map(|&v| v as f32)).collect()
+        });
         ExportedWeightsF32 { w_in, w_res, w_out }
     }
 
@@ -469,7 +573,9 @@ impl CpuEsn {
 
 fn spectral_radius(w: &[Vec<f64>]) -> f64 {
     let n = w.len();
-    if n == 0 { return 0.0; }
+    if n == 0 {
+        return 0.0;
+    }
     let mut v = vec![1.0 / (n as f64).sqrt(); n];
     let mut lambda = 0.0;
     for _ in 0..100 {
@@ -478,9 +584,13 @@ fn spectral_radius(w: &[Vec<f64>]) -> f64 {
             *wvi = w[i].iter().zip(v.iter()).map(|(a, b)| a * b).sum();
         }
         let norm: f64 = wv.iter().map(|x| x * x).sum::<f64>().sqrt();
-        if norm < 1e-14 { return 0.0; }
+        if norm < 1e-14 {
+            return 0.0;
+        }
         lambda = norm;
-        for (vi, wvi) in v.iter_mut().zip(wv.iter()) { *vi = wvi / norm; }
+        for (vi, wvi) in v.iter_mut().zip(wv.iter()) {
+            *vi = wvi / norm;
+        }
     }
     lambda
 }
@@ -492,15 +602,21 @@ fn solve_lu(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let mut piv: Vec<usize> = (0..n).collect();
     // LU factorization with partial pivoting
     for k in 0..n {
-        let (max_row, _) = (k..n).map(|i| (i, lu[i][k].abs()))
+        let (max_row, _) = (k..n)
+            .map(|i| (i, lu[i][k].abs()))
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
             .unwrap_or((k, 0.0));
         lu.swap(k, max_row);
         piv.swap(k, max_row);
-        if lu[k][k].abs() < 1e-14 { continue; }
+        if lu[k][k].abs() < 1e-14 {
+            continue;
+        }
         for i in (k + 1)..n {
             lu[i][k] /= lu[k][k];
-            for j in (k + 1)..n { let t = lu[i][k] * lu[k][j]; lu[i][j] -= t; }
+            for j in (k + 1)..n {
+                let t = lu[i][k] * lu[k][j];
+                lu[i][j] -= t;
+            }
         }
     }
     // Solve for each column of B
@@ -508,13 +624,23 @@ fn solve_lu(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     for col in 0..m {
         let mut bc: Vec<f64> = piv.iter().map(|&p| b[p][col]).collect();
         // Forward substitution
-        for i in 0..n { for j in 0..i { bc[i] -= lu[i][j] * bc[j]; } }
+        for i in 0..n {
+            for j in 0..i {
+                bc[i] -= lu[i][j] * bc[j];
+            }
+        }
         // Backward substitution
         for i in (0..n).rev() {
-            for j in (i + 1)..n { bc[i] -= lu[i][j] * bc[j]; }
-            if lu[i][i].abs() > 1e-14 { bc[i] /= lu[i][i]; }
+            for j in (i + 1)..n {
+                bc[i] -= lu[i][j] * bc[j];
+            }
+            if lu[i][i].abs() > 1e-14 {
+                bc[i] /= lu[i][i];
+            }
         }
-        for (r, &v) in bc.iter().enumerate() { x[r][col] = v; }
+        for (r, &v) in bc.iter().enumerate() {
+            x[r][col] = v;
+        }
     }
     x
 }
@@ -527,7 +653,7 @@ fn generate_physics_sequences() -> (Vec<Vec<Vec<f64>>>, Vec<Vec<f64>>, Vec<Vec<f
     // Synthetic lattice QCD-like sequences: plaquette + Polyakov observables
     // 8 features per timestep × 50 timesteps per sequence
     let n_train = 20;
-    let n_test  = 50;
+    let n_test = 50;
     let seq_len = 50;
 
     let mut train_seqs: Vec<Vec<Vec<f64>>> = Vec::with_capacity(n_train);
@@ -535,34 +661,38 @@ fn generate_physics_sequences() -> (Vec<Vec<Vec<f64>>>, Vec<Vec<f64>>, Vec<Vec<f
 
     for i in 0..n_train {
         let beta = 4.5 + (i as f64 / n_train as f64) * 2.0;
-        let seq: Vec<Vec<f64>> = (0..seq_len).map(|t| {
-            let phase = (beta - 5.69).tanh(); // synthetic phase indicator
-            vec![
-                0.5 + phase * 0.3 + rng.normal() * 0.05, // plaquette
-                phase.abs() + rng.normal() * 0.1,          // |polyakov|
-                rng.normal() * 0.05,                       // Im(L)
-                (t as f64 / seq_len as f64),               // time
-                beta / 7.0,                                // scaled beta
-                rng.normal() * 0.02,                       // noise 1
-                rng.normal() * 0.02,                       // noise 2
-                1.0 - (t as f64 / seq_len as f64),        // reverse time
-            ]
-        }).collect();
+        let seq: Vec<Vec<f64>> = (0..seq_len)
+            .map(|t| {
+                let phase = (beta - 5.69).tanh(); // synthetic phase indicator
+                vec![
+                    0.5 + phase * 0.3 + rng.normal() * 0.05, // plaquette
+                    phase.abs() + rng.normal() * 0.1,        // |polyakov|
+                    rng.normal() * 0.05,                     // Im(L)
+                    (t as f64 / seq_len as f64),             // time
+                    beta / 7.0,                              // scaled beta
+                    rng.normal() * 0.02,                     // noise 1
+                    rng.normal() * 0.02,                     // noise 2
+                    1.0 - (t as f64 / seq_len as f64),       // reverse time
+                ]
+            })
+            .collect();
         let label = if beta > 5.69 { 1.0 } else { 0.0 };
         train_seqs.push(seq);
         targets.push(vec![label]);
     }
 
-    let test_inputs: Vec<Vec<f64>> = (0..n_test).map(|_| {
-        (0..INPUT_SIZE).map(|_| rng.normal()).collect()
-    }).collect();
+    let test_inputs: Vec<Vec<f64>> = (0..n_test)
+        .map(|_| (0..INPUT_SIZE).map(|_| rng.normal()).collect())
+        .collect();
 
     (train_seqs, targets, test_inputs)
 }
 
 // ─── Utility: PRNG ────────────────────────────────────────────────────────────
 
-struct Xoshiro { s: [u64; 4] }
+struct Xoshiro {
+    s: [u64; 4],
+}
 impl Xoshiro {
     fn new(seed: u64) -> Self {
         let mut s = [0u64; 4];
@@ -575,14 +705,21 @@ impl Xoshiro {
         Self { s }
     }
     fn next_u64(&mut self) -> u64 {
-        let r = (self.s[0].wrapping_add(self.s[3])).rotate_left(23).wrapping_add(self.s[0]);
+        let r = (self.s[0].wrapping_add(self.s[3]))
+            .rotate_left(23)
+            .wrapping_add(self.s[0]);
         let t = self.s[1] << 17;
-        self.s[2] ^= self.s[0]; self.s[3] ^= self.s[1];
-        self.s[1] ^= self.s[2]; self.s[0] ^= self.s[3];
-        self.s[2] ^= t; self.s[3] = self.s[3].rotate_left(45);
+        self.s[2] ^= self.s[0];
+        self.s[3] ^= self.s[1];
+        self.s[1] ^= self.s[2];
+        self.s[0] ^= self.s[3];
+        self.s[2] ^= t;
+        self.s[3] = self.s[3].rotate_left(45);
         r
     }
-    fn uniform(&mut self) -> f64 { (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64 }
+    fn uniform(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
     fn normal(&mut self) -> f64 {
         let u1 = self.uniform().max(1e-14);
         let u2 = self.uniform();

@@ -27,7 +27,7 @@ both APIs give ~1:64 (hardware ratio). The real breakthrough was the double-floa
 | 5 | Max FC width ~hundreds | **Tested to 8192+ neurons** — all map to HW | Massive FC networks fit in 8MB SRAM |
 | 6 | No direct weight mutation | **set_variable() updates weights without reprogram** | Hot-swap weights at ~14ms overhead |
 | 7 | "30mW" power spec | **Board floor 900mW, chip compute below noise** | True chip power is unmeasurably small |
-| 8 | 8MB SRAM is the limit | **PCIe BAR1 exposes 16GB address space** | Full NP mesh may be memory-mapped |
+| 8 | 8MB SRAM is the limit | **PCIe BAR1 exposes 16GB address space** | Full NP mesh memory-mapped; rustChip `SramAccessor` + `probe_sram` provide direct read/write |
 | 9 | Program is opaque | **FlatBuffer format with program_info + program_data** | Weights transmitted via DMA, not in program |
 | 10 | Simple inference engine | **C++ engine has SkipDMA, on-chip learning, register access** | Hardware capabilities far exceed SDK |
 
@@ -269,6 +269,11 @@ specific NP-mapped offsets after programming.
 **This is a significant finding**: The hardware has a MUCH larger address
 space than the 8MB SRAM spec suggests. Whether this is usable or just decoder
 range remains to be determined.
+
+**Update (rustChip)**: BAR1 SRAM is now **directly accessible** via rustChip,
+not just observable. The `SramAccessor` (akida-driver) provides direct BAR0
+register + BAR1 SRAM read/write. The `probe_sram` binary offers three modes
+(probe, scan, test) for full read/write access to NP SRAM regions.
 
 ---
 

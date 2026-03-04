@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Integration tests for dual-backend NPU driver
 //!
 //! Deep Debt: Tests verify both kernel and userspace backends produce identical results

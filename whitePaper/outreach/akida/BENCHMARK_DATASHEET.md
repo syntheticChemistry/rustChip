@@ -292,7 +292,19 @@ on availability (`with_hardware_linear()` call, zero user code change).
 
 ---
 
-## 11. AKD1500 Projections
+## 11. SRAM Probe Metrics
+
+**akida-bench binary:** `cargo run --bin probe_sram` (modes: probe, scan, test)
+
+| Metric | Target | Notes |
+|--------|--------|-------|
+| BAR0 register probe (80 registers) | **< 1 ms** | Full register map scan |
+| BAR1 SRAM readback | TBD | Model verification path |
+| Weight mutation (zero-DMA) | ~86 µs | Direct BAR1 write |
+
+---
+
+## 12. AKD1500 Projections
 
 Projected from AKD1000 measurements, pending hardware validation:
 
