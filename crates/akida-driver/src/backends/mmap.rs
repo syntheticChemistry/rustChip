@@ -20,7 +20,7 @@ use std::fs::{File, OpenOptions};
 use std::os::unix::io::AsFd;
 use std::ptr::NonNull;
 
-/// Memory-mapped PCIe BAR region
+/// Memory-mapped `PCIe` BAR region
 ///
 /// Provides safe, bounds-checked access to memory-mapped hardware.
 /// Unsafe operations are encapsulated and well-documented.
@@ -34,7 +34,7 @@ pub struct MmapRegion {
 }
 
 impl MmapRegion {
-    /// Create memory-mapped region for PCIe BAR
+    /// Create memory-mapped region for `PCIe` BAR
     ///
     /// # Errors
     ///
@@ -243,7 +243,7 @@ impl MmapRegion {
         self.size
     }
 
-    /// Get PCIe address
+    /// Get `PCIe` address
     #[must_use]
     pub fn pcie_address(&self) -> &str {
         &self.pcie_address

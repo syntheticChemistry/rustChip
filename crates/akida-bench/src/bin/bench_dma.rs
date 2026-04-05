@@ -2,16 +2,16 @@
 
 //! DMA throughput benchmark — sustained read + write to device SRAM.
 //!
-//! Reference measurement (AKD1000, PCIe x1 Gen2, Feb 2026):
+//! Reference measurement (AKD1000, `PCIe` x1 Gen2, Feb 2026):
 //!   Sustained DMA throughput: 37 MB/s (read + write combined)
 //!
-//! The AKD1000 is PCIe x1 Gen2 (theoretical 500 MB/s). Measured throughput
+//! The AKD1000 is `PCIe` x1 Gen2 (theoretical 500 MB/s). Measured throughput
 //! is 37 MB/s, consistent with the DW eDMA controller overhead and the
 //! Akida kernel module's scatter-gather transfer implementation.
 //!
 //! Usage:
-//!   cargo run --bin bench_dma
-//!   cargo run --bin bench_dma -- --size-kb 64 --iterations 200
+//!   cargo run --bin `bench_dma`
+//!   cargo run --bin `bench_dma` -- --size-kb 64 --iterations 200
 
 use anyhow::Result;
 use std::time::{Duration, Instant};
@@ -32,8 +32,8 @@ fn main() -> Result<()> {
 
     println!("DMA throughput benchmark");
     println!("========================");
-    println!("Transfer size : {} KB", transfer_kb);
-    println!("Iterations    : {}", iterations);
+    println!("Transfer size : {transfer_kb} KB");
+    println!("Iterations    : {iterations}");
     println!();
 
     let manager = akida_driver::DeviceManager::discover()?;
@@ -88,10 +88,7 @@ fn print_throughput(label: &str, elapsed: Duration, bytes: f64) {
     let secs = elapsed.as_secs_f64();
     let mb_s = (bytes / 1_048_576.0) / secs;
     let per_transfer_us = (secs / (bytes / 4096.0)) * 1e6;
-    println!(
-        "  {}: {:.1} MB/s  ({:.0} µs / 4KB transfer)",
-        label, mb_s, per_transfer_us
-    );
+    println!("  {label}: {mb_s:.1} MB/s  ({per_transfer_us:.0} µs / 4KB transfer)");
 }
 
 fn parse_arg(args: &[String], flag: &str, default: usize) -> usize {

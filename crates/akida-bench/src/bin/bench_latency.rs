@@ -2,7 +2,7 @@
 
 //! Inference latency benchmark — single-sample and batched.
 //!
-//! Reference measurements (AKD1000, PCIe x1 Gen2, Feb 2026):
+//! Reference measurements (AKD1000, `PCIe` x1 Gen2, Feb 2026):
 //!   Single inference:  54 µs  (18,500 Hz)   — Phase C pure Rust driver
 //!   Batch=8:           ~390 µs/sample         — 2.4× throughput
 //!   20,700 infer/sec   (batch=8 sustained)
@@ -10,7 +10,7 @@
 //! The 54 µs is PCIe-dominated: ~650 µs kernel driver round-trip
 //! compressed by Phase C's direct ioctl path.
 //!
-//! Discovery 3 (BEYOND_SDK.md) batch sweet-spot table:
+//! Discovery 3 (`BEYOND_SDK.md`) batch sweet-spot table:
 //!   batch=1:  948 µs/sample   1,055 /s
 //!   batch=2:  568 µs/sample   1,760 /s
 //!   batch=4:  426 µs/sample   2,346 /s
@@ -18,8 +18,8 @@
 //!   batch=16: 481 µs/sample   2,078 /s
 //!
 //! Usage:
-//!   cargo run --bin bench_latency
-//!   cargo run --bin bench_latency -- --iterations 2000
+//!   cargo run --bin `bench_latency`
+//!   cargo run --bin `bench_latency` -- --iterations 2000
 
 use anyhow::Result;
 use std::time::Instant;
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     println!("Inference latency benchmark");
     println!("===========================");
     println!("Model topology : {INPUT_DIM}→256→{OUTPUT_DIM}  (FC, int4 weights)");
-    println!("Iterations     : {}", iterations);
+    println!("Iterations     : {iterations}");
     println!();
 
     let manager = akida_driver::DeviceManager::discover()?;
@@ -77,11 +77,11 @@ fn main() -> Result<()> {
     println!("Single-sample latency");
     println!("---------------------");
     println!("  mean : {:.0} µs  ({:.0} Hz)", mean, 1e6 / mean);
-    println!("  min  : {:.0} µs", min);
-    println!("  p50  : {:.0} µs", p50);
-    println!("  p95  : {:.0} µs", p95);
-    println!("  p99  : {:.0} µs", p99);
-    println!("  max  : {:.0} µs", max);
+    println!("  min  : {min:.0} µs");
+    println!("  p50  : {p50:.0} µs");
+    println!("  p95  : {p95:.0} µs");
+    println!("  p99  : {p99:.0} µs");
+    println!("  max  : {max:.0} µs");
     println!();
 
     // Batch amortization sweep (Discovery 3)

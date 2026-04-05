@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! BAR layout probe — Discovery 8 from BEYOND_SDK.md.
+//! BAR layout probe — Discovery 8 from `BEYOND_SDK.md`.
 //!
-//! "PCIe BAR1 exposes 16 GB address space — full NP mesh decode range"
+//! "`PCIe` BAR1 exposes 16 GB address space — full NP mesh decode range"
 //!
-//! Reference (BEYOND_SDK.md, Discovery 8):
+//! Reference (`BEYOND_SDK.md`, Discovery 8):
 //!   BAR0: 0x84000000,       16 MB,  32-bit non-prefetch,  register space
 //!   BAR1: 0x4000000000,     16 GB,  64-bit prefetchable,  NP mesh window
 //!   BAR3: 0x4400000000,     32 MB,  64-bit prefetchable,  secondary memory
@@ -38,14 +38,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", hw.status_line());
     println!();
 
-    let mgr = match hw.manager() {
-        Some(m) => m,
-        None => {
-            println!("No hardware detected — showing expected layout only");
-            println!();
-            show_expected_layout();
-            return Ok(());
-        }
+    let mgr = if let Some(m) = hw.manager() {
+        m
+    } else {
+        println!("No hardware detected — showing expected layout only");
+        println!();
+        show_expected_layout();
+        return Ok(());
     };
 
     for info in mgr.devices() {
@@ -59,8 +58,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let content = std::fs::read_to_string(&resource_path)?;
             println!("  BAR layout from sysfs:");
             println!(
-                "  {:>5}  {:>18}  {:>18}  {:>12}  {}",
-                "BAR", "start", "end", "size", "flags"
+                "  {:>5}  {:>18}  {:>18}  {:>12}  flags",
+                "BAR", "start", "end", "size"
             );
             println!(
                 "  {:-<5}  {:-<18}  {:-<18}  {:-<12}  {:-<10}",
@@ -84,10 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let size_str = humanize_size(size);
                 let flag_str = bar_flags(flags);
 
-                println!(
-                    "  {:>5}  {:#018x}  {:#018x}  {:>12}  {}",
-                    i, start, end, size_str, flag_str
-                );
+                println!("  {i:>5}  {start:#018x}  {end:#018x}  {size_str:>12}  {flag_str}");
             }
             println!();
         } else {
@@ -145,9 +141,9 @@ fn annotate_register(name: &str, value: u32) -> String {
     match name {
         "DEVICE_ID" if value == 0x1940_00a1 => " (AKD1000 confirmed)".to_string(),
         "NP_COUNT" => format!(" ({} NPs)", value & 0xFF),
-        "DMA_MESH_CONFIG" => format!(" (DMA config word)"),
-        "SRAM_REGION_0" => format!(" (SRAM region 0)"),
-        "SRAM_REGION_1" => format!(" (SRAM region 1)"),
+        "DMA_MESH_CONFIG" => " (DMA config word)".to_string(),
+        "SRAM_REGION_0" => " (SRAM region 0)".to_string(),
+        "SRAM_REGION_1" => " (SRAM region 1)".to_string(),
         _ if name.starts_with("NP_ENABLE") => {
             if value == 1 {
                 " (enabled)".to_string()
@@ -178,11 +174,11 @@ fn humanize_size(bytes: u64) -> String {
     } else if bytes >= 1024 {
         format!("{} KB", bytes / 1024)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
-fn bar_flags(flags: u64) -> &'static str {
+const fn bar_flags(flags: u64) -> &'static str {
     match flags & 0xF {
         0x0 => "32-bit non-prefetch",
         0x4 => "64-bit non-prefetch",

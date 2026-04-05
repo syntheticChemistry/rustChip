@@ -9,6 +9,7 @@ use crate::error::{AkidaError, Result};
 use super::EsnWeights;
 
 /// Pure f32 + tanh ESN executor (powers `PureSoftware` mode).
+#[derive(Debug)]
 pub(super) struct SoftwareEsnExecutor {
     input_dim: usize,
     reservoir_dim: usize,

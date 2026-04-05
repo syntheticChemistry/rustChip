@@ -2,9 +2,9 @@
 
 //! Enumerate all Akida devices on the system and print capabilities.
 //!
-//! Reference measurements (AKD1000, PCIe x1 Gen2):
-//!   Device: BrainChip AKD1000 (1e7c:bca1)
-//!   PCIe: Gen2 x1, ~500 MB/s theoretical
+//! Reference measurements (AKD1000, `PCIe` x1 Gen2):
+//!   Device: `BrainChip` AKD1000 (1e7c:bca1)
+//!   `PCIe`: Gen2 x1, ~500 MB/s theoretical
 //!   NPUs: 80 (5×8×2 mesh, 78 functional)
 //!   SRAM: 8 MB on-chip + 256 Mbit LPDDR4
 //!   BAR0: 16 MB (registers), BAR1: 16 GB (NP mesh window)
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         }
 
         if let Some(clock) = caps.clock_mode {
-            println!("  Clock mode   : {:?}", clock);
+            println!("  Clock mode   : {clock:?}");
         }
 
         if let Some(batch) = &caps.batch {
@@ -54,11 +54,11 @@ fn main() -> Result<()> {
         }
 
         if let Some(power_mw) = caps.power_mw {
-            println!("  Power        : {} mW", power_mw);
+            println!("  Power        : {power_mw} mW");
         }
 
         if let Some(temp) = caps.temperature_c {
-            println!("  Temperature  : {:.1} °C", temp);
+            println!("  Temperature  : {temp:.1} °C");
         }
 
         println!("  Weight mut.  : {:?}", caps.weight_mutation);

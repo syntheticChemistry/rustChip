@@ -2,16 +2,16 @@
 
 //! VFIO container and IOMMU group setup.
 
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
-use std::fs::File;
 
 use crate::error::{AkidaError, Result};
 
 use super::ioctls::{
-    self, ioctl_vfio_device_get_info, ioctl_vfio_group_get_device_fd, ioctl_vfio_group_get_status,
-    ioctl_vfio_group_set_container, ioctl_vfio_set_iommu, ioctl_vfio_check_type1v2,
-    ioctl_vfio_get_api_version, VfioDeviceInfo,
+    self, VfioDeviceInfo, ioctl_vfio_check_type1v2, ioctl_vfio_device_get_info,
+    ioctl_vfio_get_api_version, ioctl_vfio_group_get_device_fd, ioctl_vfio_group_get_status,
+    ioctl_vfio_group_set_container, ioctl_vfio_set_iommu,
 };
 
 /// Find IOMMU group number for a `PCIe` device (sysfs).

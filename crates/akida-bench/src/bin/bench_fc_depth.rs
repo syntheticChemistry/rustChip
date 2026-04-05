@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! FC depth benchmark — Discovery 2 from BEYOND_SDK.md.
+//! FC depth benchmark — Discovery 2 from `BEYOND_SDK.md`.
 //!
-//! "All FC layers merge into a single hardware pass via SkipDMA"
+//! "All FC layers merge into a single hardware pass via `SkipDMA`"
 //! "8 layers costs only 3µs more than 2 layers"
 //!
-//! Reference (BEYOND_SDK.md, Discovery 2):
+//! Reference (`BEYOND_SDK.md`, Discovery 2):
 //!   depth=2 (3 layers): lat=713µs
 //!   depth=5 (6 layers): lat=703µs   ← slightly faster (NP parallelism?)
 //!   depth=8 (9 layers): lat=716µs   ← only 3µs above depth=2
 //!
-//! SkipDMA routes data NP-to-NP without PCIe round-trip.
-//! Deep FC networks are essentially free once PCIe transfer is paid.
+//! `SkipDMA` routes data NP-to-NP without `PCIe` round-trip.
+//! Deep FC networks are essentially free once `PCIe` transfer is paid.
 
 use anyhow::Result;
 use std::time::Instant;

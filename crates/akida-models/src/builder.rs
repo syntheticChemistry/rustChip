@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Programmatic FlatBuffer model construction for Akida NPUs.
+//! Programmatic `FlatBuffer` model construction for Akida NPUs.
 //!
-//! Builds model programs layer-by-layer without the BrainChip SDK
-//! (MetaTF / QuantizeML / CNN2SNN). The output is a `ProgramBinary`
+//! Builds model programs layer-by-layer without the `BrainChip` SDK
+//! (`MetaTF` / `QuantizeML` / CNN2SNN). The output is a `ProgramBinary`
 //! compatible with `program_external()` injection.
 //!
 //! # Architecture
@@ -21,14 +21,14 @@
 //!
 //! # Status
 //!
-//! Scaffolded — structure and API are defined; the FlatBuffer serialization
-//! in `build()` will be completed once the full program_info/program_data
+//! Scaffolded — structure and API are defined; the `FlatBuffer` serialization
+//! in `build()` will be completed once the full `program_info/program_data`
 //! format is reverse-engineered (see `akida_chip::program` for current
 //! understanding of the binary format).
 
 use akida_chip::program::ProgramBinary;
 
-/// Layer-by-layer FlatBuffer program builder.
+/// Layer-by-layer `FlatBuffer` program builder.
 ///
 /// Accumulates layer specifications and produces a `ProgramBinary`
 /// that can be loaded via `program_external()`.
@@ -42,7 +42,7 @@ pub struct ProgramBuilder {
 impl ProgramBuilder {
     /// Create a new empty program builder.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             layers: Vec::new(),
             target_np_offset: 0,
@@ -55,14 +55,17 @@ impl ProgramBuilder {
     /// When loading multiple programs (multi-tenancy), each program
     /// targets a different NP range. Offset 0 is the default.
     #[must_use]
-    pub fn with_np_offset(mut self, offset: u32) -> Self {
+    pub const fn with_np_offset(mut self, offset: u32) -> Self {
         self.target_np_offset = offset;
         self
     }
 
-    /// Set global quantization configuration.
+    /// Set global quantization configuration for serialized weights.
+    ///
+    /// Drives how layer weights are packed (bit width, scale, zero-point) when
+    /// `build()` writes the program; matches AKD int1/2/4 deployment options.
     #[must_use]
-    pub fn with_quantization(mut self, config: QuantConfig) -> Self {
+    pub const fn with_quantization(mut self, config: QuantConfig) -> Self {
         self.quant_config = Some(config);
         self
     }
@@ -71,6 +74,11 @@ impl ProgramBuilder {
     ///
     /// Layers are processed in order. The first layer must be an input
     /// layer (`InputConv` or `FullyConnected` with `is_input: true`).
+    ///
+    /// # Arguments
+    ///
+    /// * `layer` — Specification for the next stage; NP footprint is estimated
+    ///   via [`LayerSpec::estimated_np_count`] during `build()`.
     pub fn add_layer(&mut self, layer: LayerSpec) -> &mut Self {
         self.layers.push(layer);
         self
@@ -80,6 +88,11 @@ impl ProgramBuilder {
     ///
     /// Adds a final `FullyConnected` layer with the given output dimension,
     /// configured as the output layer.
+    ///
+    /// # Arguments
+    ///
+    /// * `output_dim` — Readout width (e.g. number of classes, or `1` for a
+    ///   scalar ESN prediction).
     pub fn append_head(&mut self, output_dim: u32) -> &mut Self {
         self.layers.push(LayerSpec::FullyConnected {
             neurons: output_dim,
@@ -92,13 +105,13 @@ impl ProgramBuilder {
 
     /// Number of layers added so far.
     #[must_use]
-    pub fn layer_count(&self) -> usize {
+    pub const fn layer_count(&self) -> usize {
         self.layers.len()
     }
 
     /// Build the final program binary.
     ///
-    /// Serializes all layers into FlatBuffer `program_info` + `program_data`
+    /// Serializes all layers into `FlatBuffer` `program_info` + `program_data`
     /// format compatible with `program_external()`.
     ///
     /// # Errors
@@ -116,10 +129,10 @@ impl ProgramBuilder {
         self.validate_layers()?;
 
         // Compute NP allocation for each layer
-        let allocation = self.allocate_nps()?;
+        let allocation = self.allocate_nps();
 
         // Serialize to FlatBuffer binary
-        let (info_bytes, data_bytes) = self.serialize(&allocation)?;
+        let (info_bytes, data_bytes) = self.serialize(&allocation);
 
         let mut bytes = info_bytes;
         let info_end = bytes.len();
@@ -146,7 +159,7 @@ impl ProgramBuilder {
         Ok(())
     }
 
-    fn allocate_nps(&self) -> Result<Vec<NpAllocation>, BuildError> {
+    fn allocate_nps(&self) -> Vec<NpAllocation> {
         let mut allocations = Vec::with_capacity(self.layers.len());
         let mut next_np = self.target_np_offset;
 
@@ -160,14 +173,14 @@ impl ProgramBuilder {
             next_np += np_count;
         }
 
-        Ok(allocations)
+        allocations
     }
 
     #[expect(
         clippy::unused_self,
         reason = "Placeholder serializer; self reserved for future format work"
     )]
-    fn serialize(&self, _allocation: &[NpAllocation]) -> Result<(Vec<u8>, Vec<u8>), BuildError> {
+    const fn serialize(&self, _allocation: &[NpAllocation]) -> (Vec<u8>, Vec<u8>) {
         // Placeholder: actual FlatBuffer serialization will be implemented
         // once the full program_info/program_data binary format is confirmed.
         //
@@ -181,7 +194,7 @@ impl ProgramBuilder {
         let info = Vec::new();
         let data = Vec::new();
 
-        Ok((info, data))
+        (info, data)
     }
 }
 
@@ -228,14 +241,14 @@ impl EsnProgramBuilder {
 
     /// Set the NP offset for multi-tenant deployment.
     #[must_use]
-    pub fn with_np_offset(mut self, offset: u32) -> Self {
+    pub const fn with_np_offset(mut self, offset: u32) -> Self {
         self.np_offset = offset;
         self
     }
 
     /// Override quantization config.
     #[must_use]
-    pub fn with_quantization(mut self, quant: QuantConfig) -> Self {
+    pub const fn with_quantization(mut self, quant: QuantConfig) -> Self {
         self.quant = quant;
         self
     }
@@ -294,7 +307,7 @@ pub enum LayerSpec {
 
     /// Fully connected layer.
     ///
-    /// Discovery 2: FC layers merge via SkipDMA — deep chains execute
+    /// Discovery 2: FC layers merge via `SkipDMA` — deep chains execute
     /// as a single hardware pass.
     /// Discovery 5: tested to 8192+ neurons (SRAM-limited only).
     FullyConnected {
@@ -327,19 +340,19 @@ impl LayerSpec {
     /// Based on observed allocation patterns from hardware probing.
     /// Actual allocation depends on compiler heuristics.
     #[must_use]
-    pub fn estimated_np_count(&self) -> u32 {
+    pub const fn estimated_np_count(&self) -> u32 {
         match self {
             Self::InputConv { channels, .. } => {
                 // ~1 NP per 16 channels (observed pattern)
-                (channels + 15) / 16
+                channels.div_ceil(16)
             }
             Self::FullyConnected { neurons, .. } => {
                 // ~1 NP per 128 neurons (FC packing observed)
-                (neurons + 127) / 128
+                neurons.div_ceil(128)
             }
             Self::SeparableConv { filters, .. } => {
                 // ~1 NP per 32 filters (separable conv pattern)
-                (filters + 31) / 32
+                filters.div_ceil(32)
             }
         }
     }
@@ -350,9 +363,9 @@ impl LayerSpec {
 pub enum Activation {
     /// No activation (identity).
     Linear,
-    /// Bounded ReLU (hardware native, clips negatives to 0).
+    /// Bounded `ReLU` (hardware native, clips negatives to 0).
     BoundedRelu,
-    /// Standard ReLU.
+    /// Standard `ReLU`.
     Relu,
 }
 
@@ -382,6 +395,7 @@ impl Default for QuantConfig {
 
 /// Internal NP allocation for a single layer.
 #[derive(Debug)]
+#[allow(dead_code)] // Filled for future FlatBuffer NP layout; `serialize` is still a placeholder.
 struct NpAllocation {
     layer_index: usize,
     start_np: u32,
@@ -404,7 +418,7 @@ pub enum BuildError {
         /// NPs available.
         available: u32,
     },
-    /// FlatBuffer serialization failed.
+    /// `FlatBuffer` serialization failed.
     SerializationFailed(String),
 }
 
@@ -480,5 +494,95 @@ mod tests {
     fn default_quant_config() {
         let q = QuantConfig::default();
         assert_eq!(q.weight_bits, 4);
+    }
+
+    #[test]
+    fn program_builder_with_input_produces_empty_split_program_binary() {
+        let mut builder = ProgramBuilder::new()
+            .with_np_offset(10)
+            .with_quantization(QuantConfig {
+                weight_bits: 4,
+                scale: 0.5,
+                zero_point: 0,
+            });
+        builder.add_layer(LayerSpec::FullyConnected {
+            neurons: 64,
+            activation: Activation::Linear,
+            is_input: true,
+            is_output: false,
+        });
+        let bin = builder.build().expect("valid minimal program");
+        assert_eq!(bin.info_end, 0);
+        assert!(bin.program_info().is_empty());
+        assert!(bin.program_data().is_empty());
+        assert!(bin.is_empty());
+    }
+
+    #[test]
+    fn append_head_adds_output_fc_layer() {
+        let mut builder = ProgramBuilder::new();
+        builder.add_layer(LayerSpec::InputConv {
+            channels: 8,
+            kernel_size: 1,
+            stride: 1,
+            activation: Activation::Linear,
+        });
+        builder.append_head(3);
+        assert_eq!(builder.layer_count(), 2);
+    }
+
+    #[test]
+    fn separable_conv_np_estimation_uses_filter_ceiling() {
+        let layer = LayerSpec::SeparableConv {
+            filters: 100,
+            kernel_size: 3,
+            stride: 1,
+            activation: Activation::Relu,
+        };
+        assert_eq!(layer.estimated_np_count(), 4); // ceil(100/32)
+    }
+
+    #[test]
+    fn build_error_display_contains_message() {
+        let e = BuildError::InvalidLayerConfig("bad dims".to_string());
+        let s = e.to_string();
+        assert!(s.contains("bad dims"));
+    }
+
+    #[test]
+    fn build_error_display_np_overflow_and_serialization() {
+        let e = BuildError::NpOverflow {
+            required: 900,
+            available: 100,
+        };
+        assert!(e.to_string().contains("900"));
+        let e2 = BuildError::SerializationFailed("eof".to_string());
+        assert!(e2.to_string().contains("eof"));
+        assert_eq!(
+            BuildError::NoLayers.to_string(),
+            "no layers added to program builder"
+        );
+    }
+
+    #[test]
+    fn program_builder_default_matches_new() {
+        assert_eq!(
+            ProgramBuilder::default().layer_count(),
+            ProgramBuilder::new().layer_count()
+        );
+    }
+
+    #[test]
+    fn esn_builder_np_offset_and_quant_roundtrip() {
+        let q = QuantConfig {
+            weight_bits: 2,
+            scale: 0.25,
+            zero_point: -1,
+        };
+        let b = EsnProgramBuilder::new(4, 64, 2)
+            .with_np_offset(7)
+            .with_quantization(q.clone());
+        b.build().expect("esn build");
+        assert_eq!(q.weight_bits, 2);
     }
 }

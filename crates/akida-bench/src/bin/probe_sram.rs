@@ -295,10 +295,7 @@ fn run_test(pcie_addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!();
-    println!(
-        "Results: {} pass, {} fail, {} skip",
-        pass_count, fail_count, skip_count
-    );
+    println!("Results: {pass_count} pass, {fail_count} fail, {skip_count} skip");
 
     // Byte-level read/write test
     println!();

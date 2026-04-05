@@ -19,6 +19,7 @@ pub struct HardwareProbe {
 impl HardwareProbe {
     /// Probe for available Akida hardware via runtime discovery.
     /// Never fails — returns a probe with `is_available() == false` if no hardware.
+    #[must_use]
     pub fn detect() -> Self {
         Self {
             manager: DeviceManager::discover().ok(),
@@ -27,7 +28,7 @@ impl HardwareProbe {
 
     /// Whether any Akida hardware is present.
     #[must_use]
-    pub fn is_available(&self) -> bool {
+    pub const fn is_available(&self) -> bool {
         self.manager.is_some()
     }
 
@@ -39,31 +40,32 @@ impl HardwareProbe {
 
     /// Borrow the device manager (only available when hardware is present).
     #[must_use]
-    pub fn manager(&self) -> Option<&DeviceManager> {
+    pub const fn manager(&self) -> Option<&DeviceManager> {
         self.manager.as_ref()
     }
 
     /// Human-readable status string for benchmark output.
     #[must_use]
     pub fn status_line(&self) -> String {
-        match &self.manager {
-            Some(mgr) => {
+        self.manager.as_ref().map_or_else(
+            || "Hardware: not detected (software mode)".to_string(),
+            |mgr| {
                 let count = mgr.device_count();
-                let first = mgr.devices().first();
-                match first {
-                    Some(dev) => format!(
-                        "Hardware: {} device(s), {:?} @ {} ({} NPUs, {} MB SRAM)",
-                        count,
-                        dev.capabilities.chip_version,
-                        dev.pcie_address,
-                        dev.capabilities.npu_count,
-                        dev.capabilities.memory_mb,
-                    ),
-                    None => format!("Hardware: {count} device(s)"),
-                }
-            }
-            None => "Hardware: not detected (software mode)".to_string(),
-        }
+                mgr.devices().first().map_or_else(
+                    || format!("Hardware: {count} device(s)"),
+                    |dev| {
+                        format!(
+                            "Hardware: {} device(s), {:?} @ {} ({} NPUs, {} MB SRAM)",
+                            count,
+                            dev.capabilities.chip_version,
+                            dev.pcie_address,
+                            dev.capabilities.npu_count,
+                            dev.capabilities.memory_mb,
+                        )
+                    },
+                )
+            },
+        )
     }
 }
 
@@ -77,7 +79,7 @@ impl Xoshiro {
     /// Create with a seed. Deterministic — same seed, same sequence.
     #[must_use]
     pub fn new(seed: u64) -> Self {
-        let mut s = [seed, seed.wrapping_mul(6364136223846793005), 0, 0];
+        let mut s = [seed, seed.wrapping_mul(6_364_136_223_846_793_005), 0, 0];
         s[2] = s[0] ^ s[1];
         s[3] = s[1] ^ s[0].rotate_left(17);
         let mut x = Self { s };
@@ -88,7 +90,7 @@ impl Xoshiro {
     }
 
     /// Next u64 value.
-    pub fn next_u64(&mut self) -> u64 {
+    pub const fn next_u64(&mut self) -> u64 {
         let result = (self.s[1].wrapping_mul(5)).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
         self.s[2] ^= self.s[0];
@@ -113,7 +115,7 @@ impl Xoshiro {
     /// Fill a slice with random f32 values in [-scale, scale].
     pub fn fill_f32(&mut self, buf: &mut [f32], scale: f32) {
         for x in buf.iter_mut() {
-            *x = (self.next_f32() * 2.0 - 1.0) * scale;
+            *x = self.next_f32().mul_add(2.0, -1.0) * scale;
         }
     }
 }

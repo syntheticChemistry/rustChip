@@ -54,7 +54,7 @@ fn run() -> akida_models::Result<()> {
             "--cache-dir" | "-c" => {
                 i += 1;
                 if i < args.len() {
-                    cache_dir = args[i].clone();
+                    cache_dir.clone_from(&args[i]);
                 }
             }
             "--list" | "-l" => {
@@ -144,8 +144,7 @@ fn parse_model_name(name: &str) -> akida_models::Result<ZooModel> {
         "event_camera" | "eventcamera" => Ok(ZooModel::EventCamera),
         "esn_chaotic" | "esn" | "chaotic" => Ok(ZooModel::EsnChaotic),
         _ => Err(akida_models::AkidaModelError::loading_failed(format!(
-            "Unknown model: {}. Use --list to see available models.",
-            name
+            "Unknown model: {name}. Use --list to see available models."
         ))),
     }
 }
@@ -182,13 +181,13 @@ fn format_size(bytes: usize) -> String {
     } else if bytes >= 1_000 {
         format!("{:.0} KB", bytes as f64 / 1_000.0)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
 fn print_help() {
     println!(
-        r#"
+        r"
 Akida Model Zoo CLI
 
 USAGE:
@@ -223,6 +222,6 @@ EXAMPLES:
 
     # Create specific stub
     model_zoo --create-stub ds_cnn_kws
-"#
+"
     );
 }

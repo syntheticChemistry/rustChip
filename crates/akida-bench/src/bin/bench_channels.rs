@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Channel count benchmark — Discovery 1 from BEYOND_SDK.md.
+//! Channel count benchmark — Discovery 1 from `BEYOND_SDK.md`.
 //!
-//! "InputConv: 1 or 3 channels only" — SDK enforced, NOT silicon limited.
+//! "`InputConv`: 1 or 3 channels only" — SDK enforced, NOT silicon limited.
 //! Any channel count from 1–64 works on hardware.
 //!
-//! Reference (BEYOND_SDK.md, Discovery 1):
+//! Reference (`BEYOND_SDK.md`, Discovery 1):
 //!   channels=  1: lat=707µs — works
 //!   channels= 16: lat=657µs — works
 //!   channels= 50: lat=649µs — works  ← our physics vectors
 //!   channels= 64: lat=714µs — works
 //!
-//! The SDK check is in MetaTF Python code, not in the C++ engine or silicon.
+//! The SDK check is in `MetaTF` Python code, not in the C++ engine or silicon.
 
 use anyhow::Result;
 use std::time::Instant;

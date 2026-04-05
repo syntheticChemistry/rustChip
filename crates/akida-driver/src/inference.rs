@@ -268,4 +268,34 @@ mod tests {
         let timeout_large = estimate_inference_timeout(10_000);
         assert!(timeout_large > timeout_small);
     }
+
+    #[test]
+    fn inference_config_empty_shape_product_is_one_byte() {
+        let config = InferenceConfig::new(vec![], vec![], 2, 4);
+        assert_eq!(config.input_size_bytes(), 2);
+        assert_eq!(config.output_size_bytes(), 4);
+    }
+
+    #[test]
+    fn inference_executor_exposes_config() {
+        let ex = InferenceExecutor::new(InferenceConfig::new(vec![2, 2], vec![1], 1, 4));
+        assert_eq!(ex.config().input_shape, vec![2, 2]);
+        assert_eq!(ex.config().output_shape, vec![1]);
+    }
+
+    #[test]
+    fn inference_result_throughput_and_latency_helpers() {
+        let mut r = InferenceResult {
+            output: bytes::Bytes::from(vec![0u8; 4]),
+            input_transfer_duration: std::time::Duration::from_micros(1),
+            output_transfer_duration: std::time::Duration::from_micros(1),
+            total_duration: std::time::Duration::from_secs(1),
+            input_bytes: 4,
+            output_bytes: 4,
+        };
+        assert!((r.throughput_ips() - 1.0).abs() < 0.001);
+        assert!((r.latency_us() - 1_000_000.0).abs() < 1.0);
+        r.total_duration = std::time::Duration::from_secs(0);
+        assert_eq!(r.throughput_ips(), 0.0);
+    }
 }

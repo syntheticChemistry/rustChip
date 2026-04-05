@@ -2,7 +2,7 @@
 
 //! Runtime device discovery
 //!
-//! Discovers Akida devices at runtime by scanning `/dev/akida*` and PCIe sysfs.
+//! Discovers Akida devices at runtime by scanning `/dev/akida*` and `PCIe` sysfs.
 //! No hardcoded device lists—pure runtime discovery following primal self-knowledge pattern.
 
 use crate::capabilities::Capabilities;
@@ -25,7 +25,7 @@ pub struct DeviceInfo {
     /// Device file path (/dev/akida0, etc.)
     pub path: PathBuf,
 
-    /// PCIe bus address (0000:a1:00.0, etc.)
+    /// `PCIe` bus address (0000:a1:00.0, etc.)
     pub pcie_address: String,
 
     /// Device capabilities (discovered at runtime)
@@ -152,7 +152,7 @@ impl DeviceManager {
         self.devices.iter().map(AkidaDevice::open).collect()
     }
 
-    /// Find PCIe address for a device index
+    /// Find `PCIe` address for a device index
     ///
     /// Scans `/sys/bus/pci/devices/*/` for matching Akida vendor/device IDs
     fn find_pcie_address(device_index: usize) -> Result<String> {
@@ -175,11 +175,12 @@ impl DeviceManager {
             // Read device ID
             let device_id = Self::read_hex_sysfs(&path.join("device")).ok();
 
-            if let (Some(vendor), Some(device)) = (vendor_id, device_id) {
-                if vendor == BRAINCHIP_VENDOR_ID && ALL_DEVICE_IDS.contains(&device) {
-                    let pcie_addr = entry.file_name().to_string_lossy().to_string();
-                    matches.push(pcie_addr);
-                }
+            if let (Some(vendor), Some(device)) = (vendor_id, device_id)
+                && vendor == BRAINCHIP_VENDOR_ID
+                && ALL_DEVICE_IDS.contains(&device)
+            {
+                let pcie_addr = entry.file_name().to_string_lossy().to_string();
+                matches.push(pcie_addr);
             }
         }
 
@@ -219,7 +220,7 @@ impl DeviceInfo {
         &self.path
     }
 
-    /// Get PCIe address
+    /// Get `PCIe` address
     #[must_use]
     pub fn pcie_address(&self) -> &str {
         &self.pcie_address
@@ -235,6 +236,50 @@ impl DeviceInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::capabilities::{Capabilities, ChipVersion, PcieConfig, WeightMutationSupport};
+    use std::path::{Path, PathBuf};
+
+    fn sample_capabilities() -> Capabilities {
+        Capabilities {
+            chip_version: ChipVersion::Akd1000,
+            npu_count: 80,
+            memory_mb: 8,
+            pcie: PcieConfig::new(2, 1),
+            power_mw: None,
+            temperature_c: None,
+            mesh: None,
+            clock_mode: None,
+            batch: None,
+            weight_mutation: WeightMutationSupport::None,
+        }
+    }
+
+    #[test]
+    fn device_info_accessors_roundtrip() {
+        let caps = sample_capabilities();
+        let info = DeviceInfo {
+            index: 2,
+            path: PathBuf::from("/dev/akida2"),
+            pcie_address: "0000:c1:00.0".to_string(),
+            capabilities: caps.clone(),
+        };
+        assert_eq!(info.index(), 2);
+        assert_eq!(info.path(), Path::new("/dev/akida2"));
+        assert_eq!(info.pcie_address(), "0000:c1:00.0");
+        assert_eq!(info.capabilities().npu_count, caps.npu_count);
+    }
+
+    #[test]
+    fn lspci_filter_matches_vendor_device_pattern() {
+        let f = crate::pcie_ids::lspci_filter();
+        assert_eq!(f.chars().filter(|c| *c == ':').count(), 1);
+        assert!(f.contains(':'));
+    }
+
+    #[test]
+    fn all_device_ids_is_non_empty() {
+        assert!(!crate::pcie_ids::ALL_DEVICE_IDS.is_empty());
+    }
 
     #[test]
     fn test_device_discovery() {

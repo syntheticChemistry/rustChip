@@ -41,13 +41,13 @@ use tracing::{debug, info, warn};
 /// Source of a zoo model
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelSource {
-    /// BrainChip MetaTF official zoo
+    /// `BrainChip` `MetaTF` official zoo
     BrainChipMetaTf,
-    /// NeuroBench benchmark suite
+    /// `NeuroBench` benchmark suite
     NeuroBench,
     /// ecoPrimals physics models (validated on live AKD1000)
     EcoPrimalsPhysics,
-    /// Hand-built via program_external()
+    /// Hand-built via `program_external()`
     HandBuilt,
 }
 
@@ -102,7 +102,7 @@ pub enum ZooModel {
     AndersonRegimeClassifier,
 
     // ── Hand-built custom ────────────────────────────────────────────────────
-    /// Minimal FC(50→1) smoke test for program_external() validation
+    /// Minimal FC(50→1) smoke test for `program_external()` validation
     MinimalFc,
 }
 
@@ -210,12 +210,10 @@ impl ZooModel {
     /// Returns `None` if not hardware-validated.
     pub const fn chip_energy_uj(&self) -> Option<f32> {
         match self {
-            Self::EsnQcdThermalization => Some(1.4),
-            Self::PhaseClassifierSu3 => Some(1.1),
+            Self::EsnQcdThermalization | Self::EsnChaotic => Some(1.4),
+            Self::PhaseClassifierSu3 | Self::EcgAnomaly => Some(1.1),
             Self::TransportPredictorWdm => Some(1.5),
             Self::AndersonRegimeClassifier => Some(1.0),
-            Self::EsnChaotic => Some(1.4),
-            Self::EcgAnomaly => Some(1.1),
             _ => None,
         }
     }
@@ -229,12 +227,7 @@ impl ZooModel {
             | Self::TransportPredictorWdm
             | Self::AndersonRegimeClassifier
             | Self::MinimalFc => ValidationTier::HardwareValidated,
-            // Analysis complete, conversion path defined
-            Self::DsCnnKws
-            | Self::DvsGesture
-            | Self::EsnChaotic
-            | Self::EcgAnomaly
-            | Self::AkidaNet05_160 => ValidationTier::Analysis,
+            // All other variants: analysis tier (conversion path defined or pending).
             _ => ValidationTier::Analysis,
         }
     }
@@ -508,14 +501,15 @@ impl ModelZoo {
     ///
     /// Returns error if model is not available locally.
     pub fn model_path(&self, model: ZooModel) -> Result<PathBuf> {
-        if let Some(meta) = self.metadata.get(&model) {
-            Ok(meta.path.clone())
-        } else {
-            Err(AkidaModelError::loading_failed(format!(
-                "Model {} not available. Use download() first.",
-                model.filename()
-            )))
-        }
+        self.metadata.get(&model).map_or_else(
+            || {
+                Err(AkidaModelError::loading_failed(format!(
+                    "Model {} not available. Use download() first.",
+                    model.filename()
+                )))
+            },
+            |meta| Ok(meta.path.clone()),
+        )
     }
 
     /// Get model metadata
@@ -536,7 +530,7 @@ impl ModelZoo {
     /// Create a **reference** model artifact (minimal valid `.fbz`) for tooling and CI.
     ///
     /// This is the fallback path when no hardware or pre-built zoo artifact is present: it writes
-    /// a minimal FlatBuffers payload that passes format validation so parsers and benches can run.
+    /// a minimal `FlatBuffers` payload that passes format validation so parsers and benches can run.
     /// It is not a substitute for hardware-validated models in production.
     ///
     /// # Errors
@@ -570,8 +564,9 @@ impl ModelZoo {
             data.push(0x00);
         }
 
-        fs::write(&path, &data)
-            .map_err(|e| AkidaModelError::loading_failed(format!("Cannot write reference model: {e}")))?;
+        fs::write(&path, &data).map_err(|e| {
+            AkidaModelError::loading_failed(format!("Cannot write reference model: {e}"))
+        })?;
 
         info!(
             "Created reference model: {} ({} bytes)",
@@ -642,15 +637,13 @@ impl ModelZoo {
         for (section, models) in sections {
             println!("  {section}");
             for model in *models {
-                let file_status = if let Some(meta) = self.metadata.get(model) {
-                    format!("✓ {:>7} bytes", meta.size_bytes,)
-                } else {
-                    "✗ not cached ".to_string()
-                };
+                let file_status = self.metadata.get(model).map_or_else(
+                    || "✗ not cached ".to_string(),
+                    |meta| format!("✓ {:>7} bytes", meta.size_bytes),
+                );
                 let thr = model
                     .throughput_hz()
-                    .map(|hz| format!("{hz:>6} Hz"))
-                    .unwrap_or_else(|| "   n/a   ".to_string());
+                    .map_or_else(|| "   n/a   ".to_string(), |hz| format!("{hz:>6} Hz"));
                 let np = model.np_budget();
                 let tier = match model.validation() {
                     ValidationTier::HardwareValidated => "hw",
@@ -795,5 +788,92 @@ mod tests {
             ZooModel::EsnQcdThermalization.task(),
             ModelTask::TimeSeriesPrediction
         );
+    }
+
+    #[test]
+    fn validation_tier_ordering_places_hardware_above_analysis() {
+        assert!(ValidationTier::HardwareValidated > ValidationTier::Analysis);
+        assert!(ValidationTier::Functional > ValidationTier::Analysis);
+    }
+
+    #[test]
+    fn model_path_errors_when_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let zoo = ModelZoo::new(temp_dir.path()).unwrap();
+        let err = zoo.model_path(ZooModel::ViTTiny).unwrap_err();
+        assert!(err.to_string().contains("not available"));
+    }
+
+    #[test]
+    fn all_zoo_models_have_nonzero_expected_size() {
+        for m in ZooModel::all() {
+            assert!(m.expected_size_bytes() > 0, "{m:?}");
+        }
+    }
+
+    #[test]
+    fn zoo_listings_are_consistent_lengths() {
+        assert!(ZooModel::hardware_validated().len() <= ZooModel::all().len());
+        assert!(ZooModel::neurobench_models().len() <= ZooModel::all().len());
+        assert!(ZooModel::ecoprimal_physics_models().len() <= ZooModel::all().len());
+    }
+
+    #[test]
+    fn every_zoo_model_exposes_nonempty_metadata() {
+        for m in ZooModel::all() {
+            assert!(!m.filename().is_empty());
+            assert!(m.filename().ends_with(".fbz"));
+            assert!(!m.description().is_empty());
+            assert!(m.np_budget() > 0);
+            let _ = m.source();
+            let _ = m.task();
+            let _ = m.validation();
+            let _ = m.expected_size_bytes();
+        }
+    }
+
+    #[test]
+    fn validation_tier_functional_between_analysis_and_hardware() {
+        assert!(ValidationTier::Analysis < ValidationTier::Functional);
+        assert!(ValidationTier::Functional < ValidationTier::HardwareValidated);
+    }
+
+    #[test]
+    fn model_zoo_init_neurobench_stubs_idempotent() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut zoo = ModelZoo::new(temp_dir.path()).unwrap();
+        let first = zoo.init_neurobench_stubs().unwrap();
+        let second = zoo.init_neurobench_stubs().unwrap();
+        assert!(!first.is_empty() || !second.is_empty());
+        assert!(
+            second.is_empty(),
+            "second call should skip existing artifacts"
+        );
+    }
+
+    #[test]
+    fn model_zoo_indexes_invalid_fbz_then_reference_fixes_magic() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join(ZooModel::ViTTiny.filename());
+        fs::write(&path, b"not a flatbuffer").unwrap();
+        let mut zoo = ModelZoo::new(temp_dir.path()).unwrap();
+        assert!(zoo.has_model(ZooModel::ViTTiny));
+        assert!(!zoo.model_metadata(ZooModel::ViTTiny).unwrap().is_valid);
+        zoo.create_reference_model(ZooModel::ViTTiny).unwrap();
+        assert!(zoo.model_metadata(ZooModel::ViTTiny).unwrap().is_valid);
+    }
+
+    #[test]
+    fn model_zoo_cache_dir_accessor() {
+        let temp_dir = TempDir::new().unwrap();
+        let zoo = ModelZoo::new(temp_dir.path()).unwrap();
+        assert_eq!(zoo.cache_dir(), temp_dir.path());
+    }
+
+    #[test]
+    fn print_status_smoke_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let zoo = ModelZoo::new(temp_dir.path()).unwrap();
+        zoo.print_status();
     }
 }

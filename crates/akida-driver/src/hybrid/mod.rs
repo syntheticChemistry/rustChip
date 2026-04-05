@@ -8,9 +8,9 @@
 //!
 //! # The Problem This Solves
 //!
-//! The AKD1000 uses bounded ReLU as its activation function. Reservoir computing
+//! The AKD1000 uses bounded `ReLU` as its activation function. Reservoir computing
 //! (Echo State Networks) requires tanh for robust echo state property with arbitrary
-//! weight initialization. Running an ESN on hardware with bounded ReLU requires
+//! weight initialization. Running an ESN on hardware with bounded `ReLU` requires
 //! purpose-designed reservoir weights — random initialization produces degenerate
 //! (near-chance) reservoir states.
 //!
@@ -21,7 +21,7 @@
 //! `HybridEsn` accepts weights trained under tanh dynamics (hotSpring's standard
 //! output) and executes them correctly regardless of which substrate is available:
 //!
-//! - **Software mode** (available today): SoftwareBackend with native tanh.
+//! - **Software mode** (available today): `SoftwareBackend` with native tanh.
 //!   Accuracy: hotSpring's validated 89.7% on QCD thermalization.
 //!   Throughput: ~800 Hz. Used when no NPU is present.
 //!
@@ -88,7 +88,7 @@ use tracing::{debug, info};
 mod hardware;
 mod software;
 
-use hardware::{HardwareEsnExecutor, ScaleTrickConfig};
+use hardware::HardwareEsnExecutor;
 use software::SoftwareEsnExecutor;
 
 // ── Substrate mode ────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ use software::SoftwareEsnExecutor;
 /// Which substrate is currently executing the ESN.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubstrateMode {
-    /// Pure CPU f32 with tanh activation (SoftwareBackend).
+    /// Pure CPU f32 with tanh activation (`SoftwareBackend`).
     /// Available today. Accuracy: hotSpring's validated software performance.
     PureSoftware,
 
@@ -105,7 +105,7 @@ pub enum SubstrateMode {
     /// Accuracy: same as software (tanh preserved). Throughput: 18,500 Hz.
     HardwareLinear,
 
-    /// AKD1000 hardware with bounded ReLU (SDK default mode).
+    /// AKD1000 hardware with bounded `ReLU` (SDK default mode).
     /// Requires purpose-designed reservoir weights (MetaTF-trained).
     /// Accuracy: 86.1% on QCD (3.6% below software tanh).
     HardwareNative,
@@ -114,7 +114,7 @@ pub enum SubstrateMode {
 impl SubstrateMode {
     /// Human-readable description for logging and toadStool telemetry.
     #[must_use]
-    pub fn description(&self) -> &'static str {
+    pub const fn description(&self) -> &'static str {
         match self {
             Self::PureSoftware => "CPU f32 + tanh  (~800 Hz, ~44 mJ/inf)",
             Self::HardwareLinear => "AKD1000 linear + host tanh  (18,500 Hz, 1.4 µJ/inf)",
@@ -124,7 +124,7 @@ impl SubstrateMode {
 
     /// Whether this substrate preserves tanh-trained weight accuracy.
     #[must_use]
-    pub fn is_tanh_accurate(&self) -> bool {
+    pub const fn is_tanh_accurate(&self) -> bool {
         matches!(self, Self::PureSoftware | Self::HardwareLinear)
     }
 }
@@ -159,7 +159,7 @@ pub trait EsnSubstrate: Send + Sync {
     /// Returns error if input length is not a multiple of `input_dim()`.
     fn run_sequence(&mut self, inputs: &[f32]) -> Result<Vec<f32>> {
         let is = self.input_dim();
-        if inputs.len() % is != 0 {
+        if !inputs.len().is_multiple_of(is) {
             return Err(AkidaError::capability_query_failed(format!(
                 "run_sequence: input length {} not divisible by input_dim {}",
                 inputs.len(),
@@ -197,8 +197,7 @@ pub trait EsnSubstrate: Send + Sync {
     fn estimated_hz(&self) -> f64 {
         match self.substrate_mode() {
             SubstrateMode::PureSoftware => 800.0,
-            SubstrateMode::HardwareLinear => 18_500.0,
-            SubstrateMode::HardwareNative => 18_500.0,
+            SubstrateMode::HardwareLinear | SubstrateMode::HardwareNative => 18_500.0,
         }
     }
 
@@ -206,8 +205,7 @@ pub trait EsnSubstrate: Send + Sync {
     fn estimated_energy_uj(&self) -> f64 {
         match self.substrate_mode() {
             SubstrateMode::PureSoftware => 44_000.0, // ~44 mJ
-            SubstrateMode::HardwareLinear => 1.4,
-            SubstrateMode::HardwareNative => 1.4,
+            SubstrateMode::HardwareLinear | SubstrateMode::HardwareNative => 1.4,
         }
     }
 }
@@ -295,10 +293,10 @@ impl EsnWeights {
         })
     }
 
-    /// Spectral radius of w_res (rough estimate via power iteration).
+    /// Spectral radius of `w_res` (rough estimate via power iteration).
     ///
     /// An ESN with tanh needs spectral radius < 1 for echo state property.
-    /// Hardware ESNs may use higher values (bounded ReLU prevents explosion).
+    /// Hardware ESNs may use higher values (bounded `ReLU` prevents explosion).
     /// After hybrid migration, ensure spectral radius < 1.
     #[must_use]
     pub fn spectral_radius_estimate(&self, iters: usize) -> f32 {
@@ -306,9 +304,9 @@ impl EsnWeights {
         let mut v = vec![1.0f32 / (rs as f32).sqrt(); rs];
         for _ in 0..iters {
             let mut mv = vec![0.0f32; rs];
-            for i in 0..rs {
-                for j in 0..rs {
-                    mv[i] += self.w_res[i * rs + j] * v[j];
+            for (i, mv_slot) in mv.iter_mut().enumerate() {
+                for (j, vj) in v.iter().enumerate().take(rs) {
+                    *mv_slot += self.w_res[i * rs + j] * vj;
                 }
             }
             let norm = mv.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-10);
@@ -333,7 +331,7 @@ impl EsnWeights {
 /// Substrate-agnostic ESN executor.
 ///
 /// Accepts tanh-trained weights from hotSpring and dispatches to:
-/// - CPU f32 + tanh today (SoftwareBackend, correct results)
+/// - CPU f32 + tanh today (`SoftwareBackend`, correct results)
 /// - AKD1000 + host tanh when hardware mode is validated (Exp 004)
 ///
 /// The substrate can be changed at runtime without re-loading weights.
@@ -354,6 +352,8 @@ impl std::fmt::Debug for HybridEsn {
             .field("input_dim", &self.weights.input_dim)
             .field("output_dim", &self.weights.output_dim)
             .field("mode", &self.mode)
+            .field("sw_backend", &self.sw_backend)
+            .field("hw_backend", &self.hw_backend)
             .finish()
     }
 }
@@ -379,8 +379,7 @@ impl HybridEsn {
         let reservoir_dim = (rs_sq as f64).sqrt().round() as usize;
         if reservoir_dim * reservoir_dim != rs_sq {
             return Err(AkidaError::capability_query_failed(format!(
-                "w_res length {} is not a perfect square",
-                rs_sq
+                "w_res length {rs_sq} is not a perfect square"
             )));
         }
         let input_dim = w_in.len() / reservoir_dim;
@@ -456,17 +455,17 @@ impl HybridEsn {
     ///
     /// Returns error if device is incompatible with the loaded weights.
     pub fn with_hardware_linear(mut self, device: crate::device::AkidaDevice) -> Result<Self> {
-        let hw = HardwareEsnExecutor::new_linear(device, &self.weights)?;
+        let hw = HardwareEsnExecutor::new_linear(device, &self.weights);
         self.hw_backend = Some(hw);
         self.mode = SubstrateMode::HardwareLinear;
         info!("HybridEsn: upgraded to HardwareLinear mode (18,500 Hz, tanh-accurate)");
         Ok(self)
     }
 
-    /// Upgrade to hardware-native mode (bounded ReLU — for MetaTF-designed weights only).
+    /// Upgrade to hardware-native mode (bounded `ReLU` — for MetaTF-designed weights only).
     ///
-    /// Use this only when weights were explicitly designed for bounded ReLU dynamics
-    /// (i.e., trained via MetaTF, not hotSpring's software ESN path).
+    /// Use this only when weights were explicitly designed for bounded `ReLU` dynamics
+    /// (i.e., trained via `MetaTF`, not hotSpring's software ESN path).
     /// Accuracy: 86.1% on QCD (3.6% below tanh). Throughput: 18,500 Hz.
     ///
     /// For hotSpring weights: prefer `with_hardware_linear()` instead.
@@ -475,7 +474,7 @@ impl HybridEsn {
     ///
     /// Returns error if device cannot be initialized.
     pub fn with_hardware_native(mut self, device: crate::device::AkidaDevice) -> Result<Self> {
-        let hw = HardwareEsnExecutor::new_native(device, &self.weights)?;
+        let hw = HardwareEsnExecutor::new_native(device, &self.weights);
         self.hw_backend = Some(hw);
         self.mode = SubstrateMode::HardwareNative;
         info!("HybridEsn: upgraded to HardwareNative mode (bounded ReLU, -3.6% acc)");
@@ -491,13 +490,13 @@ impl HybridEsn {
 
     /// Current operating mode.
     #[must_use]
-    pub fn mode(&self) -> &SubstrateMode {
+    pub const fn mode(&self) -> &SubstrateMode {
         &self.mode
     }
 
     /// Underlying weights (for inspection, export, or cross-substrate validation).
     #[must_use]
-    pub fn weights(&self) -> &EsnWeights {
+    pub const fn weights(&self) -> &EsnWeights {
         &self.weights
     }
 
@@ -537,8 +536,7 @@ impl EsnSubstrate for HybridEsn {
             _ => self
                 .hw_backend
                 .as_ref()
-                .map(|hw| hw.state.clone())
-                .unwrap_or_else(|| self.sw_backend.reservoir_state()),
+                .map_or_else(|| self.sw_backend.reservoir_state(), |hw| hw.state.clone()),
         }
     }
 
@@ -620,7 +618,7 @@ impl SubstrateSelector {
 
     /// Build from a pre-constructed `HybridEsn`.
     #[must_use]
-    pub fn from_esn(esn: HybridEsn) -> Self {
+    pub const fn from_esn(esn: HybridEsn) -> Self {
         Self { esn }
     }
 
@@ -656,7 +654,7 @@ impl SubstrateSelector {
 
     /// Expose the inner `HybridEsn` for direct access if needed.
     #[must_use]
-    pub fn inner(&mut self) -> &mut HybridEsn {
+    pub const fn inner(&mut self) -> &mut HybridEsn {
         &mut self.esn
     }
 }
@@ -665,6 +663,7 @@ impl SubstrateSelector {
 
 #[cfg(test)]
 mod tests {
+    use super::hardware::ScaleTrickConfig;
     use super::*;
 
     fn tiny_weights(rs: usize, is: usize, os: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
@@ -922,5 +921,61 @@ mod tests {
             rho < 1.0,
             "spectral radius {rho} should be < 1 for stability"
         );
+    }
+
+    #[test]
+    fn hardware_executor_step_rejects_wrong_input_length() {
+        let (w_in, w_res, w_out) = tiny_weights(8, 4, 1);
+        let scale = ScaleTrickConfig::from_weights(&w_in, &w_res);
+        let eps = scale.epsilon;
+        let mut hw_exec = HardwareEsnExecutor {
+            reservoir_dim: 8,
+            input_dim: 4,
+            output_dim: 1,
+            leak: 0.3,
+            mode: SubstrateMode::HardwareLinear,
+            state: vec![0.0; 8],
+            w_out: w_out.clone(),
+            w_in: w_in.clone(),
+            w_res: w_res.clone(),
+            w_in_scaled: w_in.iter().map(|x| x * eps).collect(),
+            w_res_scaled: w_res.iter().map(|x| x * eps).collect(),
+            scale,
+            _device: Box::new(()),
+        };
+        assert!(hw_exec.step(&[0.0; 3]).is_err());
+    }
+
+    #[test]
+    fn hardware_executor_reset_clears_state() {
+        let (w_in, w_res, w_out) = tiny_weights(8, 4, 1);
+        let scale = ScaleTrickConfig::from_weights(&w_in, &w_res);
+        let eps = scale.epsilon;
+        let mut hw_exec = HardwareEsnExecutor {
+            reservoir_dim: 8,
+            input_dim: 4,
+            output_dim: 1,
+            leak: 0.3,
+            mode: SubstrateMode::HardwareNative,
+            state: vec![1.0; 8],
+            w_out,
+            w_in: w_in.clone(),
+            w_res: w_res.clone(),
+            w_in_scaled: w_in.iter().map(|x| x * eps).collect(),
+            w_res_scaled: w_res.iter().map(|x| x * eps).collect(),
+            scale,
+            _device: Box::new(()),
+        };
+        hw_exec.reset();
+        assert!(hw_exec.state.iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn scale_trick_clamps_epsilon_for_tiny_weights() {
+        let w_in = vec![1e-12f32; 8];
+        let w_res = vec![1e-12f32; 64];
+        let st = ScaleTrickConfig::from_weights(&w_in, &w_res);
+        assert!(st.epsilon >= 1e-6 && st.epsilon <= 1.0);
+        assert!((st.inv_epsilon - 1.0 / st.epsilon).abs() < 1e-3);
     }
 }

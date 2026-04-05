@@ -10,15 +10,15 @@
 //!   1. **CPU-f64**: Reference implementation. hotSpring-style f64 reservoir + f64 readout.
 //!      The gold standard for numerical accuracy.
 //!
-//!   2. **SoftwareBackend (VirtualNPU)**: Pure f32 CPU simulation of what the AKD1000 does.
+//!   2. **`SoftwareBackend` (`VirtualNPU`)**: Pure f32 CPU simulation of what the AKD1000 does.
 //!      Quantifies f64→f32 precision cost without hardware. Should match hardware closely.
 //!
 //!   3. **Real AKD1000**: Actual hardware via VFIO driver. int4 weights, NPU arithmetic.
 //!      The production path. Int4 quantization introduces ~1–3% additional error vs f32.
 //!
 //! Ported and extended from (ecosystem context — not a runtime dependency):
-//!   hotSpring/barracuda/src/bin/validate_lattice_npu.rs   (NpuSimulator parity check)
-//!   hotSpring/barracuda/src/md/reservoir.rs               (EchoStateNetwork + NpuSimulator)
+//!   `hotSpring/barracuda/src/bin/validate_lattice_npu.rs`   (`NpuSimulator` parity check)
+//!   hotSpring/barracuda/src/md/reservoir.rs               (`EchoStateNetwork` + `NpuSimulator`)
 //!
 //! ## What is measured
 //!
@@ -30,15 +30,15 @@
 //! ## Reference numbers (AKD1000, Feb 2026)
 //!
 //!   CPU-f64 throughput :  ~8,000,000 Hz (single thread, RS=50)
-//!   SoftwareBackend    :  ~2,500,000 Hz (f32 SIMD, RS=50)
-//!   AKD1000 (hardware) :     18,500 Hz (PCIe bound, batch=8 sweet spot)
+//!   `SoftwareBackend`    :  ~2,500,000 Hz (f32 SIMD, RS=50)
+//!   AKD1000 (hardware) :     18,500 Hz (`PCIe` bound, batch=8 sweet spot)
 //!   Energy:  CPU ~50 µJ/inference,  NPU ~1.4 µJ/inference (36× better)
 //!
 //! ## Usage
 //!
-//!   cargo run --bin bench_esn_substrate               # all substrates
-//!   cargo run --bin bench_esn_substrate -- --no-hw    # skip hardware (CI)
-//!   cargo run --bin bench_esn_substrate -- --iterations 5000
+//!   cargo run --bin `bench_esn_substrate`               # all substrates
+//!   cargo run --bin `bench_esn_substrate` -- --no-hw    # skip hardware (CI)
+//!   cargo run --bin `bench_esn_substrate` -- --iterations 5000
 
 use akida_driver::{
     DeviceManager, NpuBackend,
@@ -89,7 +89,7 @@ fn main() -> Result<()> {
         RESERVOIR_SIZE,
         INPUT_SIZE,
         OUTPUT_SIZE,
-        LEAK_RATE as f64,
+        f64::from(LEAK_RATE),
         SPECTRAL_RADIUS,
         CONNECTIVITY,
         SEED,
@@ -261,7 +261,7 @@ fn bench_software(
         let inp_f32: Vec<f32> = inp.iter().map(|&x| x as f32).collect();
         sw.reset_state();
         let out = sw.infer(&inp_f32).unwrap_or(vec![0.0]);
-        outputs.push(out[0] as f64);
+        outputs.push(f64::from(out[0]));
     }
 
     make_results("SoftwareBackend (VirtualNPU)", &latencies, outputs)
@@ -319,7 +319,7 @@ fn bench_hardware(
         device.write(&inp_bytes)?;
         device.read(&mut out_buf)?;
         let val = f32::from_le_bytes(out_buf[0..4].try_into().unwrap_or([0u8; 4]));
-        outputs.push(val as f64);
+        outputs.push(f64::from(val));
     }
 
     Ok(make_results("AKD1000 hardware (VFIO)", &latencies, outputs))
@@ -369,8 +369,7 @@ fn print_substrate_summary(cpu: &BenchResults, sw: &BenchResults, hw: Option<&Be
         let speedup_for_energy = cpu.throughput_hz / hw.throughput_hz * (50.0 / 1.4);
         println!();
         println!(
-            "  Energy per inference  CPU ~50 µJ  |  NPU ~1.4 µJ  [{:.0}× NPU advantage]",
-            speedup_for_energy
+            "  Energy per inference  CPU ~50 µJ  |  NPU ~1.4 µJ  [{speedup_for_energy:.0}× NPU advantage]"
         );
     }
 }
@@ -494,7 +493,7 @@ impl CpuEsn {
         }
         let a = self.leak_rate;
         for i in 0..self.rs {
-            self.state[i] = (1.0 - a) * self.state[i] + a * pre[i].tanh();
+            self.state[i] = (1.0 - a).mul_add(self.state[i], a * pre[i].tanh());
         }
     }
 
@@ -663,19 +662,19 @@ fn generate_physics_sequences() -> (Vec<Vec<Vec<f64>>>, Vec<Vec<f64>>, Vec<Vec<f
     let mut targets: Vec<Vec<f64>> = Vec::with_capacity(n_train);
 
     for i in 0..n_train {
-        let beta = 4.5 + (i as f64 / n_train as f64) * 2.0;
+        let beta = (i as f64 / n_train as f64).mul_add(2.0, 4.5);
         let seq: Vec<Vec<f64>> = (0..seq_len)
             .map(|t| {
                 let phase = (beta - 5.69).tanh(); // synthetic phase indicator
                 vec![
-                    0.5 + phase * 0.3 + rng.normal() * 0.05, // plaquette
-                    phase.abs() + rng.normal() * 0.1,        // |polyakov|
-                    rng.normal() * 0.05,                     // Im(L)
-                    (t as f64 / seq_len as f64),             // time
-                    beta / 7.0,                              // scaled beta
-                    rng.normal() * 0.02,                     // noise 1
-                    rng.normal() * 0.02,                     // noise 2
-                    1.0 - (t as f64 / seq_len as f64),       // reverse time
+                    rng.normal().mul_add(0.05, 0.5 + phase * 0.3), // plaquette
+                    rng.normal().mul_add(0.1, phase.abs()),        // |polyakov|
+                    rng.normal() * 0.05,                           // Im(L)
+                    (f64::from(t) / f64::from(seq_len)),           // time
+                    beta / 7.0,                                    // scaled beta
+                    rng.normal() * 0.02,                           // noise 1
+                    rng.normal() * 0.02,                           // noise 2
+                    1.0 - (f64::from(t) / f64::from(seq_len)),     // reverse time
                 ]
             })
             .collect();
@@ -707,7 +706,7 @@ impl Xoshiro {
         }
         Self { s }
     }
-    fn next_u64(&mut self) -> u64 {
+    const fn next_u64(&mut self) -> u64 {
         let r = (self.s[0].wrapping_add(self.s[3]))
             .rotate_left(23)
             .wrapping_add(self.s[0]);

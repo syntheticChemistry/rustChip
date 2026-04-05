@@ -53,12 +53,10 @@ impl WeightData {
     /// Get total number of weights
     #[must_use]
     pub fn weight_count(&self) -> usize {
-        if let Some(shape) = &self.shape {
-            shape.iter().product()
-        } else {
-            // Estimate from data size
-            self.data.len() * 8 / self.quantization.bits as usize
-        }
+        self.shape.as_ref().map_or_else(
+            || self.data.len() * 8 / self.quantization.bits as usize,
+            |shape| shape.iter().product(),
+        )
     }
 
     /// Decode quantized weights to f32
@@ -256,5 +254,70 @@ mod tests {
 
         // 10 bytes * 8 bits / 4 bits per weight = 20 weights
         assert_eq!(weights.weight_count(), 20);
+    }
+
+    #[test]
+    fn test_2bit_decode() {
+        let quant = QuantizationConfig {
+            bits: 2,
+            scale: 1.0,
+            offset: 0,
+        };
+        // One byte: four 2-bit values 00, 01, 10, 11
+        let data = vec![0b11_10_01_00u8];
+        let w = WeightData::new(quant, data);
+        let decoded = w.decode().unwrap();
+        assert_eq!(decoded.len(), 4);
+        assert!((decoded[0] - 0.0).abs() < 1e-6);
+        assert!((decoded[1] - 1.0).abs() < 1e-6);
+        assert!((decoded[2] - 2.0).abs() < 1e-6);
+        assert!((decoded[3] - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_8bit_decode() {
+        let quant = QuantizationConfig {
+            bits: 8,
+            scale: 0.5,
+            offset: 0,
+        };
+        let data = vec![10u8, 20u8];
+        let w = WeightData::new(quant, data);
+        let decoded = w.decode().unwrap();
+        assert_eq!(decoded.len(), 2);
+        assert!((decoded[0] - 5.0).abs() < 1e-6);
+        assert!((decoded[1] - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn decode_rejects_unsupported_bit_width() {
+        let quant = QuantizationConfig {
+            bits: 3,
+            scale: 1.0,
+            offset: 0,
+        };
+        let w = WeightData::new(quant, vec![0u8]);
+        assert!(w.decode().is_err());
+    }
+
+    #[test]
+    fn weight_count_prefers_shape_when_present() {
+        let quant = QuantizationConfig {
+            bits: 4,
+            scale: 1.0,
+            offset: 0,
+        };
+        let w = WeightData::new(quant, vec![0u8; 100]).with_shape(vec![2, 3, 5]);
+        assert_eq!(w.weight_count(), 30);
+    }
+
+    #[test]
+    fn extract_weights_finds_repeated_pattern() {
+        let mut data = vec![0u8; 20];
+        data[5..8].copy_from_slice(&[0xfe, 0x01, 0x00]);
+        data[8..11].copy_from_slice(&[0xfe, 0x01, 0x00]);
+        let blocks = extract_weights(&data).unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].quantization.bits, 4);
     }
 }

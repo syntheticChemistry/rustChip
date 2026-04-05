@@ -33,7 +33,7 @@ use crate::sram::SramAccessor;
 /// actual SRAM contents after loading known weights.
 #[derive(Debug, Clone)]
 pub struct PufSignature {
-    /// Raw quantization deltas (expected_byte - actual_byte).
+    /// Raw quantization deltas (`expected_byte` - `actual_byte`).
     pub deltas: Vec<i8>,
     /// Number of SRAM probes taken.
     pub probe_count: usize,
@@ -46,19 +46,19 @@ pub struct PufSignature {
 impl PufSignature {
     /// Shannon entropy of this signature.
     #[must_use]
-    pub fn entropy(&self) -> f64 {
+    pub const fn entropy(&self) -> f64 {
         self.entropy
     }
 
     /// Length of the signature in bytes.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.deltas.len()
     }
 
     /// Whether the signature is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.deltas.is_empty()
     }
 }
@@ -182,7 +182,7 @@ pub fn measure_puf(sram: &mut SramAccessor, config: &PufConfig) -> Result<PufSig
 /// Higher entropy = more unique / harder to predict.
 /// Maximum for 8-bit symbols: 8.0 bits.
 #[must_use]
-pub fn puf_entropy(signature: &PufSignature) -> f64 {
+pub const fn puf_entropy(signature: &PufSignature) -> f64 {
     signature.entropy
 }
 
@@ -325,5 +325,58 @@ mod tests {
         let config = PufConfig::default();
         assert_eq!(config.probes_per_np, 3);
         assert_eq!(config.weight_pattern, WeightPattern::Ramp);
+    }
+
+    #[test]
+    fn all_ones_and_pseudorandom_patterns_have_expected_len() {
+        let n = 64;
+        let ones = generate_pattern(WeightPattern::AllOnes, n);
+        assert!(ones.iter().all(|&b| b == 0xFF));
+        let pr = generate_pattern(WeightPattern::Pseudorandom, n);
+        assert_eq!(pr.len(), n);
+        assert_ne!(pr, vec![0u8; n]);
+    }
+
+    #[test]
+    fn puf_signature_accessors() {
+        let sig = PufSignature {
+            deltas: vec![1i8, 2, 3],
+            probe_count: 9,
+            np_indices: vec![0, 1],
+            entropy: 1.25,
+        };
+        assert_eq!(sig.len(), 3);
+        assert!(!sig.is_empty());
+        assert!((sig.entropy() - 1.25).abs() < f64::EPSILON);
+        assert!((puf_entropy(&sig) - 1.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hamming_empty_or_mismatched_length_returns_one() {
+        let a = PufSignature {
+            deltas: vec![1i8],
+            probe_count: 1,
+            np_indices: vec![0],
+            entropy: 0.0,
+        };
+        let b = PufSignature {
+            deltas: vec![1i8, 2i8],
+            probe_count: 1,
+            np_indices: vec![0],
+            entropy: 0.0,
+        };
+        assert!((puf_hamming_distance(&a, &b) - 1.0).abs() < f64::EPSILON);
+        let empty = PufSignature {
+            deltas: vec![],
+            probe_count: 0,
+            np_indices: vec![],
+            entropy: 0.0,
+        };
+        assert!((puf_hamming_distance(&empty, &empty) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn entropy_empty_deltas_is_zero() {
+        assert!((puf_entropy_from_deltas(&[]) - 0.0).abs() < f64::EPSILON);
     }
 }

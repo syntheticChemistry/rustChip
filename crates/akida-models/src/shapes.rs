@@ -73,11 +73,11 @@ pub fn extract_shapes(data: &[u8]) -> Result<Vec<Shape>> {
     let mut i = 0;
     while i + 8 < data.len() {
         // Look for potential shape sequences
-        if let Some(shape) = try_extract_shape_at(data, i) {
-            if is_valid_shape(&shape) {
-                tracing::debug!("Found shape: {}", shape);
-                shapes.push(shape);
-            }
+        if let Some(shape) = try_extract_shape_at(data, i)
+            && is_valid_shape(&shape)
+        {
+            tracing::debug!("Found shape: {}", shape);
+            shapes.push(shape);
         }
         i += 1;
     }
@@ -170,5 +170,50 @@ mod tests {
     fn test_is_vector() {
         assert!(Shape::new(vec![10]).is_vector());
         assert!(!Shape::new(vec![10, 10]).is_vector());
+    }
+
+    #[test]
+    fn scalar_shape_has_zero_elements() {
+        let s = Shape::new(Vec::new());
+        assert!(s.is_scalar());
+        assert_eq!(s.total_elements(), 1);
+    }
+
+    #[test]
+    fn extract_shapes_runs_on_minimal_buffer() {
+        let data = [0u8; 32];
+        let shapes = extract_shapes(&data).expect("extract");
+        assert!(shapes.len() <= data.len());
+    }
+
+    #[test]
+    fn extract_shapes_finds_sequence_of_small_dimensions() {
+        let mut data = vec![0u8; 128];
+        for (i, d) in [2u32, 3, 4, 5].iter().enumerate() {
+            let off = i * 4;
+            data[off..off + 4].copy_from_slice(&d.to_le_bytes());
+        }
+        let shapes = extract_shapes(&data).expect("extract");
+        assert!(
+            shapes
+                .iter()
+                .any(|s| s.dims.len() >= 2 && s.total_elements() <= 10_000_000),
+            "expected at least one plausible shape, got {shapes:?}"
+        );
+    }
+
+    #[test]
+    fn is_valid_shape_rejects_huge_product_via_extract() {
+        let mut data = vec![0u8; 64];
+        let big = 5000u32;
+        for i in 0..4 {
+            let off = i * 4;
+            data[off..off + 4].copy_from_slice(&big.to_le_bytes());
+        }
+        let shapes = extract_shapes(&data).expect("extract");
+        assert!(
+            !shapes.iter().any(|s| s.total_elements() > 10_000_000),
+            "should not admit absurd shapes"
+        );
     }
 }

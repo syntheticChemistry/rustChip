@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! FlatBuffer program format for Akida models.
+//! `FlatBuffer` program format for Akida models.
 //!
 //! Reverse-engineered from `.fbz` model files and C++ engine symbols.
-//! Source: BEYOND_SDK.md Discovery 7.
+//! Source: `BEYOND_SDK.md` Discovery 7.
 //!
 //! ## Format summary
 //!
@@ -27,12 +27,12 @@
 //! ```
 //!
 //! This bypasses the SDK compilation pipeline entirely. Given the
-//! FlatBuffer format, we can construct programs directly.
+//! `FlatBuffer` format, we can construct programs directly.
 
 /// Magic bytes at the start of a valid Akida program binary.
 pub const FLATBUFFER_MAGIC: &[u8] = b"FBUF";
 
-/// FlatBuffer root table offset location (byte 0 of the binary).
+/// `FlatBuffer` root table offset location (byte 0 of the binary).
 /// On the AKD1000 reference model: root offset = 0x148 (328).
 pub const FB_ROOT_OFFSET: usize = 0;
 
@@ -53,7 +53,7 @@ pub mod typical_sizes {
     pub const TOTAL_BYTES: usize = PROGRAM_INFO_BYTES + PROGRAM_DATA_BYTES;
 }
 
-/// `.fbz` file format (FlatBuffer + Snappy compression).
+/// `.fbz` file format (`FlatBuffer` + Snappy compression).
 pub mod fbz {
     /// Magic bytes identifying a `.fbz` file.
     pub const MAGIC: &[u8] = b"AKIDA";
@@ -68,14 +68,14 @@ pub mod fbz {
 pub struct ProgramBinary {
     /// Raw bytes of the compiled program.
     pub bytes: Vec<u8>,
-    /// Split point between program_info and program_data.
+    /// Split point between `program_info` and `program_data`.
     pub info_end: usize,
 }
 
 impl ProgramBinary {
     /// Create from raw bytes with an explicit split point.
     #[must_use]
-    pub fn new(bytes: Vec<u8>, info_end: usize) -> Self {
+    pub const fn new(bytes: Vec<u8>, info_end: usize) -> Self {
         Self { bytes, info_end }
     }
 
@@ -93,13 +93,67 @@ impl ProgramBinary {
 
     /// Total program size in bytes.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.bytes.len()
     }
 
     /// True if the binary is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.bytes.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fbz;
+    use super::typical_sizes;
+    use super::*;
+
+    #[test]
+    fn flatbuffer_magic_and_root_offset_constants() {
+        assert_eq!(FLATBUFFER_MAGIC, b"FBUF");
+        assert_eq!(FB_ROOT_OFFSET, 0);
+        assert_eq!(SDK_VERSION_OFFSET, 236);
+        assert_eq!(SDK_VERSION_STR, "2.19.1");
+    }
+
+    #[test]
+    fn typical_sizes_sum_to_observed_minimal_total() {
+        assert_eq!(
+            typical_sizes::TOTAL_BYTES,
+            typical_sizes::PROGRAM_INFO_BYTES + typical_sizes::PROGRAM_DATA_BYTES
+        );
+    }
+
+    #[test]
+    fn fbz_file_constants() {
+        assert_eq!(fbz::MAGIC, b"AKIDA");
+        assert_eq!(fbz::EXTENSION, ".fbz");
+        assert_eq!(fbz::COMPRESSION, "snappy");
+    }
+
+    #[test]
+    fn program_binary_splits_info_and_data() {
+        let info = vec![0xAA, 0xBB];
+        let data = vec![0xCC, 0xDD, 0xEE];
+        let mut bytes = info.clone();
+        let info_end = bytes.len();
+        bytes.extend_from_slice(&data);
+
+        let bin = ProgramBinary::new(bytes, info_end);
+        assert_eq!(bin.program_info(), info.as_slice());
+        assert_eq!(bin.program_data(), data.as_slice());
+        assert_eq!(bin.len(), 5);
+        assert!(!bin.is_empty());
+    }
+
+    #[test]
+    fn program_binary_empty_is_empty() {
+        let bin = ProgramBinary::new(Vec::new(), 0);
+        assert!(bin.is_empty());
+        assert_eq!(bin.len(), 0);
+        assert!(bin.program_info().is_empty());
+        assert!(bin.program_data().is_empty());
     }
 }

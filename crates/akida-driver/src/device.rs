@@ -9,7 +9,7 @@
 use rustix::fs::OFlags;
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsFd, AsRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 
 use crate::discovery::DeviceInfo;

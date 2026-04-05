@@ -42,7 +42,7 @@ impl Xoshiro {
         }
         s
     }
-    fn next(&mut self) -> u64 {
+    const fn next(&mut self) -> u64 {
         let r = self.s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
         self.s[2] ^= self.s[0];
@@ -57,7 +57,7 @@ impl Xoshiro {
         (self.next() >> 11) as f32 / (1u64 << 53) as f32
     }
     fn f32r(&mut self, lo: f32, hi: f32) -> f32 {
-        lo + self.f32() * (hi - lo)
+        self.f32().mul_add(hi - lo, lo)
     }
     fn vec(&mut self, n: usize) -> Vec<f32> {
         (0..n).map(|_| self.f32r(-1.0, 1.0)).collect()
@@ -94,7 +94,7 @@ fn run_exp002(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
         }
         ok
     };
-    let t1 = no_overlap && total_nps <= 1000 && total_nps >= 800;
+    let t1 = no_overlap && (800..=1000).contains(&total_nps);
     let note1 = if hw {
         "measured (sw model)"
     } else {
@@ -254,8 +254,7 @@ fn run_exp003_subset(
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| fitness(a).partial_cmp(&fitness(b)).unwrap())
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+            .map_or(0, |(i, _)| i);
         best_weights = candidates[best_idx].clone();
     }
     let gen_hz = iters as f64 / t0.elapsed().as_secs_f64();
@@ -331,7 +330,7 @@ fn run_exp004(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
                 hw_pre[i] += w_res_sc[i * rs + j] * hw_state[j];
             }
             let hw_out_i = hw_pre[i].max(0.0);
-            hw_state[i] = 0.7 * hw_state[i] + 0.3 * (hw_out_i * inv_eps).tanh();
+            hw_state[i] = 0.7f32.mul_add(hw_state[i], 0.3 * (hw_out_i * inv_eps).tanh());
         }
         // Native bounded ReLU (no scale trick, no tanh recovery)
         let mut nat_pre = vec![0.0f32; rs];
@@ -342,7 +341,7 @@ fn run_exp004(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
             for j in 0..rs {
                 nat_pre[i] += w_res[i * rs + j] * native_state[j];
             }
-            native_state[i] = 0.7 * native_state[i] + 0.3 * nat_pre[i].max(0.0);
+            native_state[i] = 0.7f32.mul_add(native_state[i], 0.3 * nat_pre[i].max(0.0));
         }
     }
     let b_rms = (hw_state.iter().map(|x| x * x).sum::<f32>() / rs as f32).sqrt();
@@ -376,7 +375,7 @@ fn run_exp004(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
                 for j in 0..rs {
                     hw_p[i] += w_res_sc[i * rs + j] * state[j];
                 }
-                state[i] = 0.7 * state[i] + 0.3 * (hw_p[i].max(0.0) * inv_eps).tanh();
+                state[i] = 0.7f32.mul_add(state[i], 0.3 * (hw_p[i].max(0.0) * inv_eps).tanh());
             }
             out.push(state[0]);
         }
@@ -418,7 +417,7 @@ fn run_exp004(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
                         .zip(state.iter())
                         .map(|(w, s)| w * s)
                         .sum::<f32>();
-                avg_pre_sq += (pre * pre) as f64;
+                avg_pre_sq += f64::from(pre * pre);
                 n_meas += 1;
             }
         }
@@ -464,7 +463,7 @@ fn main() {
     let substrate = if hw && hw_detected {
         format!("Hardware — {}", probe.status_line())
     } else if hw {
-        format!("--hw requested but no hardware found — falling back to software")
+        "--hw requested but no hardware found — falling back to software".to_string()
     } else {
         "Software simulation (Phase 1)".to_string()
     };
@@ -478,19 +477,19 @@ fn main() {
     let mut all_experiments: Vec<(&str, bool, Vec<(&str, bool, &str)>)> = vec![];
 
     // Exp 002
-    if exp_filter.map_or(true, |f| f == "002") {
+    if exp_filter.is_none_or(|f| f == "002") {
         let (pass, results) = run_exp002(&mut rng, hw_detected);
         all_experiments.push(("Exp 002 — Multi-Tenancy", pass, results));
     }
 
     // Exp 003 subset
-    if exp_filter.map_or(true, |f| f == "003") {
+    if exp_filter.is_none_or(|f| f == "003") {
         let (pass, results) = run_exp003_subset(&mut rng, hw_detected);
         all_experiments.push(("Exp 003 — Beyond-SDK (E3.1 + E3.6)", pass, results));
     }
 
     // Exp 004
-    if exp_filter.map_or(true, |f| f == "004") {
+    if exp_filter.is_none_or(|f| f == "004") {
         let (pass, results) = run_exp004(&mut rng, hw_detected);
         all_experiments.push(("Exp 004 — Hybrid Tanh (Approach B)", pass, results));
     }
@@ -499,7 +498,7 @@ fn main() {
 
     // Print detailed results
     for (exp_name, exp_pass, subtests) in &all_experiments {
-        println!("\n── {} ──", exp_name);
+        println!("\n── {exp_name} ──");
         for (name, pass, note) in subtests {
             println!(
                 "  {}  {}  [{}]",

@@ -120,4 +120,36 @@ mod tests {
         assert_eq!(program.memory_bytes, data.len());
         assert!(program.checksum != 0);
     }
+
+    #[test]
+    fn model_from_bytes_yields_non_empty_program_payload() {
+        let mut data = vec![0u8; 600];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+
+        let model = crate::Model::from_bytes(&data).expect("model");
+        assert!(!model.data().is_empty());
+        let program = akida_driver::ModelProgram::new(model.data().to_vec());
+        assert_eq!(program.memory_bytes, model.program_size());
+    }
+
+    #[test]
+    fn model_program_checksum_matches_byte_sum_of_payload() {
+        let mut data = vec![0u8; 200];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+        data[100] = 7;
+        data[101] = 3;
+
+        let model = crate::Model::from_bytes(&data).expect("model");
+        let raw = model.data().to_vec();
+        let expected = raw
+            .iter()
+            .fold(0u32, |acc, &b| acc.wrapping_add(u32::from(b)));
+        let program = akida_driver::ModelProgram::new(raw);
+        assert_eq!(program.checksum, expected);
+        assert!(program.npus_required >= 1);
+    }
 }

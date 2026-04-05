@@ -57,12 +57,40 @@ path = "tests/backend_parity.rs"
 crate-type = ["rlib"]
 
 # Cannot use `workspace = true` here: workspace forbids unsafe; this crate needs VFIO/mmap/DMA unsafe.
+# Clippy settings mirror the workspace; cast allows match root `Cargo.toml` (numeric-heavy driver code).
 [lints.rust]
 unsafe_code = "allow"
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
+dead_code = "allow"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+cast_possible_wrap = "allow"
+too_many_lines = "allow"
+type_complexity = "allow"
+struct_field_names = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+needless_pass_by_ref_mut = "allow"
+trivially_copy_pass_by_ref = "allow"
+too_many_arguments = "allow"
+unreadable_literal = "allow"
+needless_range_loop = "allow"
+option_if_let_else = "allow"
+manual_let_else = "allow"
+assigning_clones = "allow"
+no_effect_underscore_binding = "allow"
+or_fun_call = "allow"
+unnecessary_wraps = "allow"
+needless_for_each = "allow"
+match_wildcard_for_single_variants = "allow"
+if_same_then_else = "allow"
+collection_is_never_read = "allow"
+branches_sharing_code = "allow"

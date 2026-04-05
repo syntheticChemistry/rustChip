@@ -5,7 +5,7 @@
 //! Three backends available:
 //! - **Kernel**: Uses `/dev/akida*` (requires C kernel module, best performance)
 //! - **VFIO**: Pure Rust with DMA via IOMMU (no C module, good performance)
-//! - **Userspace**: Memory-mapped PCIe BARs (pure Rust, no DMA, development)
+//! - **Userspace**: Memory-mapped `PCIe` BARs (pure Rust, no DMA, development)
 //!
 //! Deep Debt Compliance:
 //! - Runtime capability discovery (no hardcoding)
@@ -29,15 +29,15 @@ pub(crate) fn read_hwmon_power(pcie_address: &str) -> Option<f32> {
     let hwmon_dir = format!("/sys/bus/pci/devices/{pcie_address}/hwmon");
     for entry in std::fs::read_dir(&hwmon_dir).ok()?.flatten() {
         let power_path = entry.path().join("power1_average");
-        if let Ok(content) = std::fs::read_to_string(&power_path) {
-            if let Ok(microwatts) = content.trim().parse::<u64>() {
-                #[expect(
-                    clippy::cast_precision_loss,
-                    reason = "Integer cycle count to f64 for rate"
-                )]
-                let watts = microwatts as f32 / 1_000_000.0;
-                return Some(watts);
-            }
+        if let Ok(content) = std::fs::read_to_string(&power_path)
+            && let Ok(microwatts) = content.trim().parse::<u64>()
+        {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "Integer cycle count to f64 for rate"
+            )]
+            let watts = microwatts as f32 / 1_000_000.0;
+            return Some(watts);
         }
     }
     None

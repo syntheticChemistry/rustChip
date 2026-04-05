@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! `akida` — command-line interface for BrainChip Akida hardware.
+//! `akida` — command-line interface for `BrainChip` Akida hardware.
 //!
 //! ```text
 //! USAGE:
@@ -28,22 +28,22 @@ enum Cmd {
     Enumerate,
     /// Print detailed information for one device.
     Info {
-        /// PCIe address (e.g. 0000:a1:00.0) or device index (e.g. 0).
+        /// `PCIe` address (e.g. 0000:a1:00.0) or device index (e.g. 0).
         device: String,
     },
-    /// Bind a device to vfio-pci (requires root / CAP_SYS_ADMIN).
+    /// Bind a device to vfio-pci (requires root / `CAP_SYS_ADMIN`).
     BindVfio {
-        /// PCIe address (e.g. 0000:a1:00.0).
+        /// `PCIe` address (e.g. 0000:a1:00.0).
         pcie_addr: String,
     },
-    /// Unbind a device from vfio-pci and re-bind to akida_pcie (if loaded).
+    /// Unbind a device from vfio-pci and re-bind to `akida_pcie` (if loaded).
     UnbindVfio {
-        /// PCIe address (e.g. 0000:a1:00.0).
+        /// `PCIe` address (e.g. 0000:a1:00.0).
         pcie_addr: String,
     },
     /// Query the IOMMU group for a device.
     IommuGroup {
-        /// PCIe address (e.g. 0000:a1:00.0).
+        /// `PCIe` address (e.g. 0000:a1:00.0).
         pcie_addr: String,
     },
 }
@@ -77,7 +77,7 @@ fn cmd_enumerate() -> Result<()> {
         let variant = match c.chip_version {
             akida_driver::ChipVersion::Akd1000 => "AKD1000",
             akida_driver::ChipVersion::Akd1500 => "AKD1500",
-            _ => "Unknown",
+            akida_driver::ChipVersion::Unknown(_) => "Unknown",
         };
 
         println!("[{}] {} @ {}", info.index(), variant, info.pcie_address());
@@ -94,7 +94,7 @@ fn cmd_enumerate() -> Result<()> {
             );
         }
         if let Some(clock) = c.clock_mode {
-            println!("     Clock {:?}", clock);
+            println!("     Clock {clock:?}");
         }
         if let Some(batch) = &c.batch {
             println!(
@@ -103,7 +103,7 @@ fn cmd_enumerate() -> Result<()> {
             );
         }
         if let Some(pw) = c.power_mw {
-            println!("     Power {} mW", pw);
+            println!("     Power {pw} mW");
         }
         println!("     WeightMut {:?}", c.weight_mutation);
         println!();
@@ -122,7 +122,7 @@ fn cmd_info(device: &str) -> Result<()> {
         mgr.devices()
             .iter()
             .find(|d| d.pcie_address() == device)
-            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", device))?
+            .ok_or_else(|| anyhow::anyhow!("Device not found: {device}"))?
             .clone()
     };
 
@@ -144,11 +144,11 @@ fn cmd_info(device: &str) -> Result<()> {
             m.y,
             m.z,
             m.functional_count,
-            (m.x as u32 * m.y as u32 * m.z as u32).saturating_sub(m.functional_count)
+            (u32::from(m.x) * u32::from(m.y) * u32::from(m.z)).saturating_sub(m.functional_count)
         );
     }
     if let Some(clock) = c.clock_mode {
-        println!("Clock mode   : {:?}", clock);
+        println!("Clock mode   : {clock:?}");
     }
     if let Some(batch) = &c.batch {
         println!(
@@ -157,16 +157,16 @@ fn cmd_info(device: &str) -> Result<()> {
         );
     }
     if let Some(pw) = c.power_mw {
-        println!("Power        : {} mW", pw);
+        println!("Power        : {pw} mW");
     }
     if let Some(t) = c.temperature_c {
-        println!("Temperature  : {:.1} °C", t);
+        println!("Temperature  : {t:.1} °C");
     }
     println!("WeightMut    : {:?}", c.weight_mutation);
 
     // IOMMU group (useful for VFIO setup)
     match akida_driver::vfio::iommu_group(info.pcie_address()) {
-        Ok(g) => println!("IOMMU group  : {}", g),
+        Ok(g) => println!("IOMMU group  : {g}"),
         Err(_) => println!("IOMMU group  : (not available — IOMMU disabled?)"),
     }
 
@@ -174,7 +174,7 @@ fn cmd_info(device: &str) -> Result<()> {
 }
 
 fn cmd_bind_vfio(pcie_addr: &str) -> Result<()> {
-    println!("Binding {} to vfio-pci ...", pcie_addr);
+    println!("Binding {pcie_addr} to vfio-pci ...");
     akida_driver::vfio::bind_to_vfio(pcie_addr)?;
     println!(
         "Done. IOMMU group: {}",
@@ -188,7 +188,7 @@ fn cmd_bind_vfio(pcie_addr: &str) -> Result<()> {
 }
 
 fn cmd_unbind_vfio(pcie_addr: &str) -> Result<()> {
-    println!("Unbinding {} from vfio-pci ...", pcie_addr);
+    println!("Unbinding {pcie_addr} from vfio-pci ...");
     akida_driver::vfio::unbind_from_vfio(pcie_addr)?;
     println!("Done.");
     Ok(())

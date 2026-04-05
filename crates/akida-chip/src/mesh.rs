@@ -3,13 +3,13 @@
 //! NP mesh topology and routing model.
 //!
 //! Established by hardware probing and C++ engine symbol analysis.
-//! Source: BEYOND_SDK.md Discoveries 2, 5, 9.
+//! Source: `BEYOND_SDK.md` Discoveries 2, 5, 9.
 //!
 //! ## Key findings
 //!
 //! - AKD1000 has **80 NPs** in a **5×8×2** mesh (78 functional in production)
-//! - FC layers **merge into a single hardware pass** via SkipDMA routing
-//!   (NP-to-NP transfer without PCIe round-trip)
+//! - FC layers **merge into a single hardware pass** via `SkipDMA` routing
+//!   (NP-to-NP transfer without `PCIe` round-trip)
 //! - Multiple SRAM types: 64-bit filter SRAM, 51-bit threshold SRAM,
 //!   32-bit event/status SRAM
 //! - Three hardware variants in C++ engine: `akida::v1` (AKD1000),
@@ -59,6 +59,7 @@ pub struct NpCapabilities {
     pub macs_per_npu: u32,
     /// Local SRAM per NPU in KB (configurable range).
     pub sram_per_npu_kb_min: u32,
+    /// Upper bound of local SRAM per NPU in KB.
     pub sram_per_npu_kb_max: u32,
     /// Weight precision bits (Akida 1.0).
     pub weight_bits: &'static [u8],
@@ -81,7 +82,7 @@ pub const AKD1000_TOTAL_MACS: u32 =
     MeshTopology::AKD1000.functional * AKD1000_NP.npus_per_node * AKD1000_NP.macs_per_npu;
 // = 78 × 4 × 128 = 39,936
 
-/// SkipDMA — NP-to-NP data routing without PCIe round-trip.
+/// `SkipDMA` — NP-to-NP data routing without `PCIe` round-trip.
 ///
 /// Discovered by C++ engine symbol analysis (Discovery 2 and 9).
 /// This mechanism is why deep FC chains execute as a single hardware pass.
@@ -90,7 +91,7 @@ pub mod skip_dma {
     /// Tested up to depth=8 (9 layers) with identical latency.
     pub const MAX_MERGED_DEPTH: usize = 8;
 
-    /// Per-layer latency overhead when using SkipDMA (µs).
+    /// Per-layer latency overhead when using `SkipDMA` (µs).
     /// Discovery 2: 8 layers costs only 3 µs more than 2 layers.
     pub const PER_LAYER_OVERHEAD_US: u64 = 0; // effectively zero
 }
@@ -123,5 +124,23 @@ mod tests {
     fn total_macs() {
         // 78 NPs × 4 NPUs × 128 MACs = 39,936
         assert_eq!(AKD1000_TOTAL_MACS, 39_936);
+    }
+
+    #[test]
+    fn skip_dma_constants_documented() {
+        assert!(super::skip_dma::MAX_MERGED_DEPTH >= 1);
+        assert_eq!(super::skip_dma::PER_LAYER_OVERHEAD_US, 0);
+    }
+
+    #[test]
+    fn sram_type_symbols_are_non_empty() {
+        assert!(!super::sram_types::FSRAM_64B.is_empty());
+        assert!(!super::sram_types::TSRAM_51B.is_empty());
+    }
+
+    #[test]
+    fn np_capabilities_weight_and_activation_bits() {
+        assert_eq!(AKD1000_NP.weight_bits, &[1, 2, 4]);
+        assert_eq!(AKD1000_NP.activation_bits, &[1, 2, 4]);
     }
 }

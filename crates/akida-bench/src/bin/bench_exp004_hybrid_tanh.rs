@@ -2,18 +2,18 @@
 //! Experiment 004 — Hybrid Tanh Validation
 //!
 //! **Status:** Approach B (scale trick) — implemented and runnable NOW.
-//!             Approach A (FlatBuffer threshold override) — pending Phase 2.
+//!             Approach A (`FlatBuffer` threshold override) — pending Phase 2.
 //!
 //! **Runs on:** Software simulation today. Live hardware when Akida device discovered.
 //!
 //! # What This Tests
 //!
-//! 1. Does the scale trick (ε-scaled weights → bounded ReLU → host tanh recovery)
+//! 1. Does the scale trick (ε-scaled weights → bounded `ReLU` → host tanh recovery)
 //!    preserve ESN accuracy vs the pure-software tanh baseline?
 //!
 //! 2. What is the ε-vs-accuracy tradeoff? (smaller ε = more linear but lower int4 resolution)
 //!
-//! 3. For the hardware path: does AKD1000 bounded ReLU truly behave linearly
+//! 3. For the hardware path: does AKD1000 bounded `ReLU` truly behave linearly
 //!    when weights are scaled to keep pre-activations in [0, 0.01]?
 //!
 //! # Expected Results (software simulation)
@@ -24,7 +24,7 @@
 //!
 //! # Hardware Path (Phase 2, after Exp 004 validation)
 //!
-//! Build FlatBuffer program with all NP thresholds set to max.
+//! Build `FlatBuffer` program with all NP thresholds set to max.
 //! Load via `program_external()`. Run inference. Apply tanh on host.
 //! If outputs match this simulation, `HybridEsn::with_hardware_linear()` is live.
 //!
@@ -48,7 +48,7 @@ impl Xoshiro {
         }
         s
     }
-    fn next(&mut self) -> u64 {
+    const fn next(&mut self) -> u64 {
         let r = self.s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
         self.s[2] ^= self.s[0];
@@ -63,7 +63,7 @@ impl Xoshiro {
         (self.next() >> 11) as f32 / (1u64 << 53) as f32
     }
     fn f32_range(&mut self, lo: f32, hi: f32) -> f32 {
-        lo + self.f32() * (hi - lo)
+        self.f32().mul_add(hi - lo, lo)
     }
     fn vec(&mut self, n: usize) -> Vec<f32> {
         (0..n).map(|_| self.f32_range(-1.0, 1.0)).collect()
@@ -110,7 +110,7 @@ impl SoftEsn {
             for j in 0..self.rs {
                 pre[i] += self.w_res[i * self.rs + j] * self.state[j];
             }
-            self.state[i] = (1.0 - self.leak) * self.state[i] + self.leak * pre[i].tanh();
+            self.state[i] = (1.0 - self.leak).mul_add(self.state[i], self.leak * pre[i].tanh());
         }
         let rs = self.rs;
         (0..self.os)
@@ -129,7 +129,7 @@ impl SoftEsn {
     }
 }
 
-/// Approach B ESN — scale trick: ε-scaled weights + bounded ReLU ≈ linear + host tanh recovery.
+/// Approach B ESN — scale trick: ε-scaled weights + bounded `ReLU` ≈ linear + host tanh recovery.
 struct ApproachBEsn {
     rs: usize,
     is: usize,
@@ -173,7 +173,7 @@ impl ApproachBEsn {
         // 2. Host recovery: tanh(hw / ε) = tanh(W·x)
         for i in 0..rs {
             let pre = hw[i] * self.inv_eps;
-            self.state[i] = (1.0 - self.leak) * self.state[i] + self.leak * pre.tanh();
+            self.state[i] = (1.0 - self.leak).mul_add(self.state[i], self.leak * pre.tanh());
         }
         let os = self.os;
         (0..os)
@@ -192,7 +192,7 @@ impl ApproachBEsn {
     }
 }
 
-/// Native bounded ReLU ESN (SDK default — for comparison).
+/// Native bounded `ReLU` ESN (SDK default — for comparison).
 struct NativeEsn {
     rs: usize,
     is: usize,
@@ -228,7 +228,7 @@ impl NativeEsn {
             for j in 0..rs {
                 pre[i] += self.w_res[i * rs + j] * self.state[j];
             }
-            self.state[i] = (1.0 - self.leak) * self.state[i] + self.leak * pre[i].max(0.0);
+            self.state[i] = (1.0 - self.leak).mul_add(self.state[i], self.leak * pre[i].max(0.0));
         }
         (0..self.os)
             .map(|i| {
@@ -287,7 +287,7 @@ fn eval_accuracy(
     for k in 0..n_samples + warmup {
         let label: i32 = if k % 2 == 0 { 1 } else { -1 };
         let inp: Vec<f32> = (0..soft.is)
-            .map(|_| label as f32 * 0.5 + rng.f32_range(-0.3, 0.3))
+            .map(|_| (label as f32).mul_add(0.5, rng.f32_range(-0.3, 0.3)))
             .collect();
 
         let sw_out = soft.step(&inp);
@@ -326,7 +326,7 @@ fn task_accuracy(rng: &mut Xoshiro) -> bool {
     let rs = 128;
     let is = 6;
     let os = 1;
-    let mut soft = SoftEsn::new(rs, is, os, rng, 0.3, 0.9);
+    let soft = SoftEsn::new(rs, is, os, rng, 0.3, 0.9);
     let mut native = NativeEsn::from_soft(&soft);
 
     // Try ε values from aggressive to conservative
@@ -498,11 +498,8 @@ fn task_throughput(rng: &mut Xoshiro) -> bool {
     }
     let b_hz = iters as f64 / t0.elapsed().as_secs_f64();
 
-    println!("  Software tanh:  {:>10.0} Hz", sw_hz);
-    println!(
-        "  Approach B sw:  {:>10.0} Hz  (emulation; hardware target: 18,500 Hz)",
-        b_hz
-    );
+    println!("  Software tanh:  {sw_hz:>10.0} Hz");
+    println!("  Approach B sw:  {b_hz:>10.0} Hz  (emulation; hardware target: 18,500 Hz)");
     println!("  Overhead ratio: {:.2}×", sw_hz / b_hz);
     println!("  Note: Phase 2 hardware dispatch replaces the inner matvec with");
     println!("        device.infer() → DMA result back → identical recovery logic.");

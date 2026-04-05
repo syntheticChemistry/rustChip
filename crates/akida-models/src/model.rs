@@ -234,4 +234,66 @@ mod tests {
         assert_eq!(LayerType::from_name("fc"), LayerType::FullyConnected);
         assert_eq!(LayerType::from_name("conv_0"), LayerType::Conv2D);
     }
+
+    #[test]
+    fn from_bytes_preserves_raw_data_len() {
+        let mut data = vec![0u8; 128];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+
+        let model = Model::from_bytes(&data).expect("parse");
+        assert_eq!(model.version(), "2.18.2");
+        assert_eq!(model.program_size(), data.len());
+        assert_eq!(model.data().len(), data.len());
+    }
+
+    #[test]
+    fn model_clone_round_trips_len() {
+        let mut data = vec![0u8; 96];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+
+        let a = Model::from_bytes(&data).unwrap();
+        let b = a.clone();
+        assert_eq!(a.program_size(), b.program_size());
+        assert_eq!(a.layer_count(), b.layer_count());
+    }
+
+    #[test]
+    fn from_file_missing_returns_not_found() {
+        let err = Model::from_file("/no/such/akida_model_file.fbz").unwrap_err();
+        assert!(matches!(err, crate::AkidaModelError::FileNotFound { .. }));
+    }
+
+    #[test]
+    fn from_bytes_rejects_bad_magic() {
+        let err = Model::from_bytes(&[0u8; 32]).unwrap_err();
+        assert!(matches!(err, crate::AkidaModelError::InvalidHeader));
+    }
+
+    #[test]
+    fn layer_type_from_name_covers_variants() {
+        assert_eq!(LayerType::from_name("my_input_layer"), LayerType::InputData);
+        assert_eq!(
+            LayerType::from_name("depthwise_conv"),
+            LayerType::DepthwiseConv2D
+        );
+        assert_eq!(LayerType::from_name("max_pool"), LayerType::Pooling);
+        let unk = LayerType::from_name("custom_xyz");
+        assert!(matches!(unk, LayerType::Unknown(_)));
+        assert_eq!(format!("{unk}"), "Unknown(custom_xyz)");
+    }
+
+    #[test]
+    fn total_weight_count_sums_blocks() {
+        let mut data = vec![0u8; 256];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+        let model = Model::from_bytes(&data).unwrap();
+        let _ = model.total_weight_count();
+        assert!(model.layers().iter().all(|l| l.input_shape.is_empty()));
+    }
 }

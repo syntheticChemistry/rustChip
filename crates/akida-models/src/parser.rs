@@ -84,14 +84,14 @@ fn try_extract_version_at(data: &[u8], offset: usize) -> Option<String> {
     // Check for digit.digit pattern
     if slice[0].is_ascii_digit() && slice[1] == b'.' {
         // Find null terminator
-        if let Some(end) = slice.iter().position(|&b| b == 0) {
-            if end > 3 && end < 20 {
-                if let Ok(s) = std::str::from_utf8(&slice[..end]) {
-                    // Validate it looks like a version string
-                    if s.chars().filter(|&c| c == '.').count() >= 1 {
-                        return Some(s.to_string());
-                    }
-                }
+        if let Some(end) = slice.iter().position(|&b| b == 0)
+            && end > 3
+            && end < 20
+            && let Ok(s) = std::str::from_utf8(&slice[..end])
+        {
+            // Validate it looks like a version string
+            if s.chars().filter(|&c| c == '.').count() >= 1 {
+                return Some(s.to_string());
             }
         }
     }
@@ -99,14 +99,14 @@ fn try_extract_version_at(data: &[u8], offset: usize) -> Option<String> {
     None
 }
 
-/// Count layers by traversing FlatBuffers table structure.
+/// Count layers by traversing `FlatBuffers` table structure.
 ///
-/// FlatBuffers layout: bytes [0..4] are file identifier/magic,
+/// `FlatBuffers` layout: bytes [0..4] are file identifier/magic,
 /// bytes [4..8] are the root table offset (little-endian u32).
 /// The root table contains a vtable pointer and field offsets.
 /// We look for array-of-tables patterns (layer vectors) by
 /// counting `layer_type` metadata strings as confirmed markers,
-/// then cross-validate with FlatBuffers vector length fields
+/// then cross-validate with `FlatBuffers` vector length fields
 /// (u32 element counts preceding table offset arrays).
 fn estimate_layer_count(data: &[u8]) -> usize {
     // Primary: count confirmed layer_type metadata markers
@@ -173,14 +173,14 @@ pub fn extract_layer_names(data: &[u8]) -> Vec<String> {
         if (2..32).contains(&str_len) && i + 4 + str_len < data.len() {
             let str_data = &data[i + 4..i + 4 + str_len];
             // Check null terminator after string
-            if data.get(i + 4 + str_len) == Some(&0) {
-                if let Ok(s) = std::str::from_utf8(str_data) {
-                    if is_valid_layer_name(s) && !seen.contains(s) {
-                        tracing::debug!("FlatBuffers string at {:#x}: {}", i, s);
-                        names.push(s.to_string());
-                        seen.insert(s.to_string());
-                    }
-                }
+            if data.get(i + 4 + str_len) == Some(&0)
+                && let Ok(s) = std::str::from_utf8(str_data)
+                && is_valid_layer_name(s)
+                && !seen.contains(s)
+            {
+                tracing::debug!("FlatBuffers string at {:#x}: {}", i, s);
+                names.push(s.to_string());
+                seen.insert(s.to_string());
             }
         }
     }
@@ -192,14 +192,14 @@ pub fn extract_layer_names(data: &[u8]) -> Vec<String> {
     // Fallback: linear scan for null-terminated ASCII strings
     let mut i = 0;
     while i + 20 < data.len() {
-        if data[i].is_ascii_alphabetic() {
-            if let Some(name) = try_extract_string_at(data, i) {
-                if is_valid_layer_name(&name) && !seen.contains(&name) {
-                    tracing::debug!("Found layer name: {}", name);
-                    names.push(name.clone());
-                    seen.insert(name);
-                }
-            }
+        if data[i].is_ascii_alphabetic()
+            && let Some(name) = try_extract_string_at(data, i)
+            && is_valid_layer_name(&name)
+            && !seen.contains(&name)
+        {
+            tracing::debug!("Found layer name: {}", name);
+            names.push(name.clone());
+            seen.insert(name);
         }
         i += 1;
     }
@@ -212,14 +212,14 @@ fn try_extract_string_at(data: &[u8], offset: usize) -> Option<String> {
     let slice = &data[offset..];
 
     // Find null terminator within reasonable distance
-    if let Some(end) = slice.iter().take(32).position(|&b| b == 0) {
-        if end > 2 && end < 20 {
-            if let Ok(s) = std::str::from_utf8(&slice[..end]) {
-                // Check if it's ASCII and reasonable
-                if s.chars().all(|c| c.is_ascii() && !c.is_control()) {
-                    return Some(s.to_string());
-                }
-            }
+    if let Some(end) = slice.iter().take(32).position(|&b| b == 0)
+        && end > 2
+        && end < 20
+        && let Ok(s) = std::str::from_utf8(&slice[..end])
+    {
+        // Check if it's ASCII and reasonable
+        if s.chars().all(|c| c.is_ascii() && !c.is_control()) {
+            return Some(s.to_string());
         }
     }
 
@@ -302,5 +302,96 @@ mod tests {
             parse_header(&data),
             Err(AkidaModelError::InvalidHeader)
         ));
+    }
+
+    #[test]
+    fn parse_header_rejects_tiny_buffer() {
+        let data = [0u8; 8];
+        assert!(parse_header(&data).is_err());
+    }
+
+    #[test]
+    fn extract_layer_names_returns_empty_for_random_bytes() {
+        let data = [0xABu8; 256];
+        assert!(extract_layer_names(&data).is_empty());
+    }
+
+    #[test]
+    fn parsed_header_layer_count_is_non_zero() {
+        let mut data = b"\x80D\x04\x10\x00\x01\x01@\x0a\x00\x0c\x00\x04\x00\x00\x00\
+                     \x08\x00\x0a\x00\x00\x00\x14\x00\x00\x05\x0eD\x06\x00\x00\x00\
+                     2.18.2\x00\x00\x02\x00\x00\x00"
+            .to_vec();
+        data.resize(256, 0);
+        let header = parse_header(&data).unwrap();
+        assert!(header.layer_count >= 1);
+    }
+
+    #[test]
+    fn extract_layer_names_finds_flatbuffers_length_prefixed_name() {
+        let s = b"input_fc";
+        let len = s.len() as u32;
+        let mut data = vec![0u8; 64];
+        data[0..4].copy_from_slice(&len.to_le_bytes());
+        data[4..4 + s.len()].copy_from_slice(s);
+        data[4 + s.len()] = 0;
+        let names = extract_layer_names(&data);
+        assert!(names.iter().any(|n| n.contains("input")));
+    }
+
+    #[test]
+    fn extract_layer_names_skips_metadata_keys() {
+        let mut data = vec![0u8; 128];
+        let s = b"layer_type";
+        let len = s.len() as u32;
+        data[0..4].copy_from_slice(&len.to_le_bytes());
+        data[4..4 + s.len()].copy_from_slice(s);
+        data[4 + s.len()] = 0;
+        assert!(extract_layer_names(&data).is_empty());
+    }
+
+    #[test]
+    fn parse_header_counts_layer_type_markers() {
+        let mut data = vec![0u8; 128];
+        data[0..4].copy_from_slice(&FLATBUFFERS_MAGIC);
+        data[30..37].copy_from_slice(b"2.18.2\0");
+        data[40..50].copy_from_slice(b"layer_type");
+        data[60..70].copy_from_slice(b"layer_type");
+        let header = parse_header(&data).unwrap();
+        assert!(header.layer_count >= 2);
+    }
+
+    #[test]
+    fn parse_header_version_not_found_is_error() {
+        let mut data = vec![0x80, 0x44, 0x04, 0x10];
+        data.resize(128, 0xFF);
+        assert!(parse_header(&data).is_err());
+    }
+
+    #[test]
+    fn estimate_layer_count_uses_root_table_vector_length() {
+        let mut data = vec![0u8; 256];
+        data[0..4].copy_from_slice(&FLATBUFFERS_MAGIC);
+        data[4..8].copy_from_slice(&16u32.to_le_bytes());
+        data[16..20].copy_from_slice(&4u32.to_le_bytes());
+        assert_eq!(super::estimate_layer_count(&data), 4);
+    }
+
+    #[test]
+    fn estimate_layer_count_ignores_vector_that_exceeds_buffer() {
+        let mut data = vec![0u8; 48];
+        data[0..4].copy_from_slice(&FLATBUFFERS_MAGIC);
+        data[4..8].copy_from_slice(&16u32.to_le_bytes());
+        data[16..20].copy_from_slice(&50u32.to_le_bytes());
+        assert_eq!(super::estimate_layer_count(&data), 1);
+    }
+
+    #[test]
+    fn extract_layer_names_linear_scan_finds_null_terminated_layer_string() {
+        let mut data = vec![0u8; 200];
+        let name = b"conv_test\0";
+        data[80..80 + name.len()].copy_from_slice(name);
+        let names = extract_layer_names(&data);
+        assert!(names.iter().any(|n| n.contains("conv")));
     }
 }

@@ -175,8 +175,8 @@ impl MultiTenantDevice {
         let cross_match = a_data == b_data;
 
         Ok(IsolationResult {
-            slot_a: slot_a,
-            slot_b: slot_b,
+            slot_a,
+            slot_b,
             bytes_sampled: sample_size,
             isolated: !cross_match || a_data.iter().all(|&b| b == 0),
             a_has_data: a_data.iter().any(|&b| b != 0),
@@ -254,7 +254,7 @@ pub struct ProgramSlot {
 }
 
 impl ProgramSlot {
-    fn empty(id: usize) -> Self {
+    const fn empty(id: usize) -> Self {
         Self {
             id,
             np_start: 0,
@@ -311,6 +311,20 @@ fn compute_fingerprint(data: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backends::software::SoftwareBackend;
+
+    fn software_model_blob(rs: u32, is: u32, os: u32) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(&rs.to_le_bytes());
+        v.extend_from_slice(&is.to_le_bytes());
+        v.extend_from_slice(&os.to_le_bytes());
+        v.extend_from_slice(&0.3f32.to_le_bytes());
+        let n_in = (rs as usize) * (is as usize);
+        let n_res = (rs as usize) * (rs as usize);
+        let n_out = (os as usize) * (rs as usize);
+        v.resize(16 + (n_in + n_res + n_out) * 4, 0u8);
+        v
+    }
 
     #[test]
     fn fingerprint_deterministic() {
@@ -332,5 +346,85 @@ mod tests {
         let slot = ProgramSlot::empty(0);
         assert!(!slot.occupied);
         assert_eq!(slot.np_count, 0);
+    }
+
+    #[test]
+    fn load_at_offset_rejects_overlapping_np_ranges() {
+        let mut dev = MultiTenantDevice::new(Box::new(SoftwareBackend::new(4, 2, 1)), 100);
+        let blob = software_model_blob(4, 2, 1);
+        dev.load_at_offset(0, 0, 10, &blob).unwrap();
+        let err = dev.load_at_offset(1, 5, 10, &blob).unwrap_err();
+        assert!(err.to_string().contains("overlap"));
+    }
+
+    #[test]
+    fn load_at_offset_rejects_range_beyond_total_nps() {
+        let mut dev = MultiTenantDevice::new(Box::new(SoftwareBackend::new(4, 2, 1)), 20);
+        let blob = software_model_blob(4, 2, 1);
+        let err = dev.load_at_offset(0, 0, 50, &blob).unwrap_err();
+        assert!(err.to_string().contains("exceeds total NPs"));
+    }
+
+    #[test]
+    fn load_non_overlapping_slots_tracks_allocation() {
+        let mut dev = MultiTenantDevice::new(Box::new(SoftwareBackend::new(4, 2, 1)), 100);
+        let blob = software_model_blob(4, 2, 1);
+        dev.load_at_offset(0, 0, 10, &blob).unwrap();
+        dev.load_at_offset(1, 10, 10, &blob).unwrap();
+        assert_eq!(dev.nps_allocated(), 20);
+        assert_eq!(dev.nps_available(), 80);
+        let status = dev.slot_status();
+        assert_eq!(status.len(), 2);
+        assert!(status[0].occupied && status[1].occupied);
+        assert_eq!(
+            dev.backend().backend_type(),
+            crate::backend::BackendType::Software
+        );
+    }
+
+    #[test]
+    fn verify_isolation_requires_sram() {
+        let mut dev = MultiTenantDevice::new(Box::new(SoftwareBackend::new(4, 2, 1)), 100);
+        let blob = software_model_blob(4, 2, 1);
+        dev.load_at_offset(0, 0, 5, &blob).unwrap();
+        dev.load_at_offset(1, 5, 5, &blob).unwrap();
+        let err = dev.verify_isolation(0, 1).unwrap_err();
+        assert!(err.to_string().contains("SRAM") || err.to_string().contains("accessor"));
+    }
+
+    #[test]
+    fn unload_clears_slot() {
+        let mut dev = MultiTenantDevice::new(Box::new(SoftwareBackend::new(4, 2, 1)), 100);
+        let blob = software_model_blob(4, 2, 1);
+        dev.load_at_offset(0, 0, 10, &blob).unwrap();
+        dev.unload(0);
+        assert_eq!(dev.nps_allocated(), 0);
+        let st = dev.slot_status();
+        assert!(!st[0].occupied);
+    }
+
+    #[test]
+    fn isolation_result_clone() {
+        let r = IsolationResult {
+            slot_a: 0,
+            slot_b: 1,
+            bytes_sampled: 4096,
+            isolated: true,
+            a_has_data: true,
+            b_has_data: false,
+        };
+        assert_eq!(r.clone().isolated, r.isolated);
+    }
+
+    #[test]
+    fn slot_status_clone() {
+        let s = SlotStatus {
+            id: 0,
+            occupied: true,
+            np_start: 1,
+            np_count: 2,
+            fingerprint: 3,
+        };
+        assert_eq!(s.clone().fingerprint, 3);
     }
 }

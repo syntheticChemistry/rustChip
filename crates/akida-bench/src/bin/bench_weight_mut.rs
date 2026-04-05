@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Weight mutation benchmark — Discovery 6 from BEYOND_SDK.md.
+//! Weight mutation benchmark — Discovery 6 from `BEYOND_SDK.md`.
 //!
-//! "set_variable() updates weights without reprogram (~14 ms overhead)"
+//! "`set_variable()` updates weights without reprogram (~14 ms overhead)"
 //! "Weights are NOT in the program binary — DMA'd separately"
 //!
-//! Reference (BEYOND_SDK.md):
+//! Reference (`BEYOND_SDK.md)`:
 //!   All-ones weights, input=10×8:   result = 240
 //!   After doubling FC weights:       result = 480  (ratio 2.00 ✓)
 //!   After setting to -3:             result = -720 (ratio -3.00 ✓)
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         with_update_us,
         1e6 / with_update_us
     );
-    println!("  Weight update overhead: {:.1} ms", update_overhead_ms);
+    println!("  Weight update overhead: {update_overhead_ms:.1} ms");
     println!();
     println!("Reference: ~13 ms overhead per set_variable() call  (Feb 2026)");
     println!("Implication: batch weight updates — minimize update frequency");

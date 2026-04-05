@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Pure Rust driver for BrainChip Akida neuromorphic processors.
+//! Pure Rust driver for `BrainChip` Akida neuromorphic processors.
 //!
 //! This crate provides the full software stack for AKD1000 / AKD1500 access.
-//! No Python. No C++ SDK. No vendor MetaTF.
+//! No Python. No C++ SDK. No vendor `MetaTF`.
 //!
 //! # Backend hierarchy
 //!
@@ -40,7 +40,7 @@
 //! # }
 //! ```
 //!
-//! # Measured results (AKD1000, PCIe x1 Gen2, Feb 2026)
+//! # Measured results (AKD1000, `PCIe` x1 Gen2, Feb 2026)
 //!
 //! | Metric | Value |
 //! |--------|-------|
@@ -52,7 +52,6 @@
 
 #![warn(clippy::expect_used, clippy::unwrap_used)]
 #![warn(missing_docs)]
-#![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
 

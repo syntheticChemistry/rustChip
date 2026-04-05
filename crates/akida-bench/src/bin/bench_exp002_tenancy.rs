@@ -2,12 +2,12 @@
 //! Experiment 002 — Multi-Tenancy: NP Address Isolation
 //!
 //! **Status:** Phase 1 (software isolation model) — runnable NOW.
-//!             Phase 2 (live hardware co-loading) — auto-discovers Akida via PCIe.
+//!             Phase 2 (live hardware co-loading) — auto-discovers Akida via `PCIe`.
 //!
 //! # What This Tests
 //!
 //! 1. **Address isolation model**: Are NP address regions disjoint? If program A
-//!    occupies NPs [0, A_size) and program B occupies [A_size, A_size + B_size),
+//!    occupies NPs [0, `A_size`) and program B occupies [`A_size`, `A_size` + `B_size`),
 //!    loading B must not corrupt A's weights or thresholds.
 //!
 //! 2. **Sequential reload fidelity**: Load A → infer → load B → infer → reload A.
@@ -55,7 +55,7 @@ impl Xoshiro {
         }
         s
     }
-    fn next(&mut self) -> u64 {
+    const fn next(&mut self) -> u64 {
         let r = self.s[1].wrapping_mul(5).rotate_left(7).wrapping_mul(9);
         let t = self.s[1] << 17;
         self.s[2] ^= self.s[0];
@@ -70,7 +70,7 @@ impl Xoshiro {
         (self.next() >> 11) as f32 / (1u64 << 53) as f32
     }
     fn f32r(&mut self, lo: f32, hi: f32) -> f32 {
-        lo + self.f32() * (hi - lo)
+        self.f32().mul_add(hi - lo, lo)
     }
     fn vec(&mut self, n: usize) -> Vec<f32> {
         (0..n).map(|_| self.f32r(-1.0, 1.0)).collect()
@@ -121,8 +121,8 @@ impl ResidentSystem {
             np_address,
             np_count,
             name,
-            w: w.clone(),
-            b: b.clone(),
+            w,
+            b,
             is,
             rs,
             fingerprint: vec![],
@@ -136,7 +136,7 @@ impl ResidentSystem {
         sys
     }
 
-    /// Run one inference step (bounded ReLU FC, same as hardware).
+    /// Run one inference step (bounded `ReLU` FC, same as hardware).
     fn infer(&self, input: &[f32]) -> Vec<f32> {
         (0..self.rs)
             .map(|i| {
@@ -242,10 +242,7 @@ fn task_np_layout() -> bool {
         );
     }
     println!("  ─────────────────────────────────────────────────────");
-    println!(
-        "  TOTAL                     {:>8}  {} spare of 1,000",
-        total, spare
-    );
+    println!("  TOTAL                     {total:>8}  {spare} spare of 1,000");
     println!();
     println!(
         "  Overlap detected: {}",
@@ -407,7 +404,7 @@ fn task_weight_mutation_multitenancy(rng: &mut Xoshiro) -> bool {
     // "Mutate" system A by creating A_mut with slightly perturbed weights
     let mut a_mut = sys_a_orig.clone();
     let delta = 0.01f32;
-    for w in a_mut.w.iter_mut() {
+    for w in &mut a_mut.w {
         *w += delta * rng.f32r(-1.0, 1.0);
     }
 
@@ -521,23 +518,19 @@ fn task_sram_isolation_probe() -> bool {
     println!("\n══ Phase 2: SRAM Isolation Probe — Hardware BAR1 Verification ══");
 
     let probe = akida_bench::HardwareProbe::detect();
-    let mgr = match probe.manager() {
-        Some(m) => m,
-        None => {
-            println!("  No hardware detected — Phase 2 requires physical Akida device");
-            println!(
-                "  Run Phase 1 (software model) instead: cargo run --bin bench_exp002_tenancy"
-            );
-            return false;
-        }
+    let mgr = if let Some(m) = probe.manager() {
+        m
+    } else {
+        println!("  No hardware detected — Phase 2 requires physical Akida device");
+        println!("  Run Phase 1 (software model) instead: cargo run --bin bench_exp002_tenancy");
+        return false;
     };
 
-    let info = match mgr.devices().first() {
-        Some(i) => i,
-        None => {
-            println!("  No devices found");
-            return false;
-        }
+    let info = if let Some(i) = mgr.devices().first() {
+        i
+    } else {
+        println!("  No devices found");
+        return false;
     };
 
     let pcie_addr = info.pcie_address();
@@ -612,26 +605,23 @@ fn task_sram_isolation_probe() -> bool {
 
         if let (Some(end_a), Some(start_b)) =
             (layout.np_base_offset(np_a + 1), layout.np_base_offset(np_b))
+            && end_a <= start_b
         {
-            if end_a <= start_b {
-                let gap = start_b - end_a;
-                println!("    NP{np_a}→NP{np_b}: {gap} byte gap (isolation boundary)");
+            let gap = start_b - end_a;
+            println!("    NP{np_a}→NP{np_b}: {gap} byte gap (isolation boundary)");
 
-                // Sample the gap region — should be zeros if isolation holds
-                let gap_offset = end_a as usize;
-                match sram.read_bar1_u32(gap_offset) {
-                    Ok(val) => {
-                        if val != 0 && val != 0xFFFF_FFFF {
-                            println!(
-                                "      ⚠ Non-zero data in gap: {val:#010x} at {gap_offset:#x}"
-                            );
-                            isolation_ok = false;
-                        } else {
-                            println!("      Clean gap (zero/unmapped)");
-                        }
+            // Sample the gap region — should be zeros if isolation holds
+            let gap_offset = end_a as usize;
+            match sram.read_bar1_u32(gap_offset) {
+                Ok(val) => {
+                    if val != 0 && val != 0xFFFF_FFFF {
+                        println!("      ⚠ Non-zero data in gap: {val:#010x} at {gap_offset:#x}");
+                        isolation_ok = false;
+                    } else {
+                        println!("      Clean gap (zero/unmapped)");
                     }
-                    Err(_) => println!("      Gap not readable (expected for sparse mapping)"),
                 }
+                Err(_) => println!("      Gap not readable (expected for sparse mapping)"),
             }
         }
     }

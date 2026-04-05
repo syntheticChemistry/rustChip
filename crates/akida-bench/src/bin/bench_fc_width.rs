@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! FC width scaling benchmark — reproduces Discovery 5 from BEYOND_SDK.md.
+//! FC width scaling benchmark — reproduces Discovery 5 from `BEYOND_SDK.md`.
 //!
-//! Tests the latency vs model width curve for FullyConnected layers.
-//! This is purely a data-transfer and PCIe characterization test —
+//! Tests the latency vs model width curve for `FullyConnected` layers.
+//! This is purely a data-transfer and `PCIe` characterization test —
 //! wider models mean larger program binaries uploaded via DMA.
 //!
-//! Key finding: below ~512 neurons, PCIe dominates (flat ~650 µs).
+//! Key finding: below ~512 neurons, `PCIe` dominates (flat ~650 µs).
 //! Above 512, compute becomes non-negligible. At 4096, compute is ~15 ms.
 //!
-//! Reference table (BEYOND_SDK.md, Discovery 5):
+//! Reference table (`BEYOND_SDK.md`, Discovery 5):
 //!   InputConv(8→N) → FC(N→N) → FC(N→1)
 //!   width=  64:  prog=    5,120 B   lat=779µs
 //!   width= 128:  prog=   15,408 B   lat=700µs
@@ -89,7 +89,7 @@ fn main() -> Result<()> {
         } else if prog_bytes >= 1_000 {
             format!("{} KB", prog_bytes / 1024)
         } else {
-            format!("{} B", prog_bytes)
+            format!("{prog_bytes} B")
         };
 
         let note = if width == 512 {

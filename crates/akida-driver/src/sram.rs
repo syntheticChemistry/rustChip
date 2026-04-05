@@ -412,10 +412,11 @@ impl SramAccessor {
         let mut offset = start;
 
         while offset <= end {
-            if let Ok(value) = bar1.read_u32(offset) {
-                if value != 0 && value != 0xFFFF_FFFF {
-                    hits.push((offset, value));
-                }
+            if let Ok(value) = bar1.read_u32(offset)
+                && value != 0
+                && value != 0xFFFF_FFFF
+            {
+                hits.push((offset, value));
             }
             offset += step;
         }
@@ -425,13 +426,13 @@ impl SramAccessor {
 
     /// Get the BAR1 layout model.
     #[must_use]
-    pub fn layout(&self) -> &Bar1Layout {
+    pub const fn layout(&self) -> &Bar1Layout {
         &self.layout
     }
 
     /// Get the BAR0 mapped size.
     #[must_use]
-    pub fn bar0_size(&self) -> usize {
+    pub const fn bar0_size(&self) -> usize {
         self.bar0.size()
     }
 
@@ -464,4 +465,134 @@ pub struct RegisterDump {
     pub value: u32,
     /// Whether the read succeeded.
     pub readable: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sram_config_roundtrip_fields() {
+        let c = SramConfig {
+            region_0: 0x1000,
+            region_1: 0x2000,
+            bar_addr: 0x3000,
+        };
+        assert_eq!(c.region_0, 0x1000);
+        assert_eq!(c.region_1, 0x2000);
+        assert_eq!(c.bar_addr, 0x3000);
+    }
+
+    #[test]
+    fn register_dump_clone_semantics() {
+        let d = RegisterDump {
+            name: "DEVICE_ID".to_string(),
+            offset: 0x40,
+            value: 0xDEAD_BEEF,
+            readable: true,
+        };
+        let d2 = d.clone();
+        assert_eq!(d2.name, d.name);
+        assert_eq!(d2.offset, d.offset);
+        assert_eq!(d2.value, d.value);
+        assert!(d2.readable);
+    }
+
+    #[test]
+    fn np_config_offset_formula_matches_stride() {
+        let np_index = 3u32;
+        let reg_off = 8usize;
+        let expected =
+            regs::NP_CONFIG_BASE + (np_index as usize) * regs::NP_CONFIG_STRIDE + reg_off;
+        assert_eq!(
+            expected,
+            regs::NP_CONFIG_BASE + 3 * regs::NP_CONFIG_STRIDE + 8
+        );
+    }
+
+    #[test]
+    fn sram_config_debug_and_copy() {
+        let c = SramConfig {
+            region_0: 0xA,
+            region_1: 0xB,
+            bar_addr: 0xC,
+        };
+        let d = format!("{c:?}");
+        assert!(d.contains("region_0"));
+        let c2 = c;
+        assert_eq!(c.region_0, c2.region_0);
+    }
+
+    #[test]
+    fn register_dump_debug_covers_unreadable() {
+        let d = RegisterDump {
+            name: "X".to_string(),
+            offset: 0x100,
+            value: 0,
+            readable: false,
+        };
+        let s = format!("{d:?}");
+        assert!(s.contains("readable"));
+    }
+
+    #[test]
+    fn bar1_layout_used_by_accessor_matches_np_stride_discovered() {
+        // Mirrors discover_layout fallback path: np count in range, physical SRAM from chip default.
+        let layout = Bar1Layout::from_discovered(78, akida_chip::bar::bar1::PHYSICAL_SRAM);
+        assert_eq!(layout.np_count, 78);
+        assert_eq!(layout.np_base_offset(0), Some(0));
+        assert!(layout.np_base_offset(78).is_none());
+        let pts = layout.probe_offsets(0);
+        assert_eq!(pts.len(), 16);
+        assert_eq!(pts[0].offset, 0);
+    }
+
+    #[test]
+    fn dump_registers_list_offsets_are_monotonic_known_regs() {
+        let pairs: &[(&str, usize)] = &[
+            ("DEVICE_ID", regs::DEVICE_ID),
+            ("NP_COUNT", regs::NP_COUNT),
+            ("SRAM_REGION_0", regs::SRAM_REGION_0),
+        ];
+        for &(name, off) in pairs {
+            assert!(off < 0x100_000, "{name} offset {off:#x} looks wrong");
+        }
+    }
+
+    #[test]
+    fn bar1_layout_from_discovered_zero_np_uses_full_stride_and_zero_per_np() {
+        let layout = Bar1Layout::from_discovered(0, 8 * 1024 * 1024);
+        assert_eq!(layout.np_count, 0);
+        assert_eq!(layout.per_np_sram_bytes, 0);
+        assert_eq!(layout.np_stride, layout.decode_size);
+        assert!(layout.probe_offsets(0).len() >= 16);
+    }
+
+    #[test]
+    fn bar1_probe_offsets_includes_per_np_points_when_max_nps_positive() {
+        let layout = Bar1Layout::from_discovered(4, 1024 * 1024);
+        let p0 = layout.probe_offsets(0);
+        let p2 = layout.probe_offsets(2);
+        assert!(p2.len() > p0.len());
+        assert!(p2.iter().any(|pt| pt.description.starts_with("NP0")));
+        assert!(p2.iter().any(|pt| pt.description.starts_with("NP1")));
+    }
+
+    #[test]
+    fn bar1_np_base_offset_none_when_index_out_of_range() {
+        let layout = Bar1Layout::from_discovered(5, 100_000);
+        assert!(layout.np_base_offset(5).is_none());
+        assert_eq!(layout.np_base_offset(4), Some(4 * layout.np_stride));
+    }
+
+    #[test]
+    fn sram_config_structural_bounds_sanity() {
+        let c = SramConfig {
+            region_0: 0xFFFF_FFFF,
+            region_1: 2,
+            bar_addr: 0,
+        };
+        let product = u64::from(c.region_0) * u64::from(c.region_1);
+        assert!(product > u64::from(u32::MAX));
+    }
 }

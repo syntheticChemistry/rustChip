@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! bench_hw_sw_parity — Hardware NPU vs Software NPU: direct numerical comparison
+//! `bench_hw_sw_parity` — Hardware NPU vs Software NPU: direct numerical comparison
 //!
 //! Runs identical inputs through both backends and quantifies:
 //!   1. Throughput gap
 //!   2. Energy gap (extrapolated from measured power)
 //!   3. Numerical parity (output divergence)
-//!   4. Activation function effect (tanh vs bounded ReLU)
+//!   4. Activation function effect (tanh vs bounded `ReLU`)
 //!   5. Recurrence overhead (host-managed vs native)
 //!   6. Training loop comparison (hybrid vs pure SW)
 //!
 //! Usage:
-//!   cargo run --bin bench_hw_sw_parity               # software vs software (both available)
-//!   cargo run --bin bench_hw_sw_parity -- --hw       # include live AKD1000
-//!   cargo run --bin bench_hw_sw_parity -- --verbose
-//!   cargo run --bin bench_hw_sw_parity -- --task all|throughput|parity|activation|training
+//!   cargo run --bin `bench_hw_sw_parity`               # software vs software (both available)
+//!   cargo run --bin `bench_hw_sw_parity` -- --hw       # include live AKD1000
+//!   cargo run --bin `bench_hw_sw_parity` -- --verbose
+//!   cargo run --bin `bench_hw_sw_parity` -- --task all|throughput|parity|activation|training
 //!
-//! See: baseCamp/systems/hw_sw_comparison.md for interpretation
-//!      baseCamp/systems/hybrid_executor.md for the combined system design
+//! See: `baseCamp/systems/hw_sw_comparison.md` for interpretation
+//!      `baseCamp/systems/hybrid_executor.md` for the combined system design
 
 use anyhow::Result;
 use std::time::Instant;
@@ -43,7 +43,7 @@ impl Xoshiro {
         rng
     }
 
-    fn next_u64(&mut self) -> u64 {
+    const fn next_u64(&mut self) -> u64 {
         let result = (self.s[0].wrapping_add(self.s[3]))
             .rotate_left(23)
             .wrapping_add(self.s[0]);
@@ -68,11 +68,15 @@ impl Xoshiro {
     }
 
     fn gen_f32(&mut self, len: usize) -> Vec<f32> {
-        (0..len).map(|_| self.next_f32() * 2.0 - 1.0).collect()
+        (0..len)
+            .map(|_| self.next_f32().mul_add(2.0, -1.0))
+            .collect()
     }
 
     fn gen_f64(&mut self, len: usize) -> Vec<f64> {
-        (0..len).map(|_| self.next_f64() * 2.0 - 1.0).collect()
+        (0..len)
+            .map(|_| self.next_f64().mul_add(2.0, -1.0))
+            .collect()
     }
 }
 
@@ -152,7 +156,7 @@ impl EsnF64 {
                 Activation::BoundedRelu => pre[i].clamp(0.0, 1.0),
                 Activation::Relu => pre[i].max(0.0),
             };
-            self.state[i] = (1.0 - alpha) * self.state[i] + alpha * activated;
+            self.state[i] = (1.0 - alpha).mul_add(self.state[i], alpha * activated);
         }
         let os = self.output_dim;
         (0..os)
@@ -171,7 +175,7 @@ impl EsnF64 {
     }
 }
 
-/// CPU f32 ESN — mirrors SoftwareBackend (tanh by default)
+/// CPU f32 ESN — mirrors `SoftwareBackend` (tanh by default)
 struct EsnF32 {
     input_dim: usize,
     reservoir_dim: usize,
@@ -218,7 +222,7 @@ impl EsnF32 {
                 Activation::BoundedRelu => pre[i].clamp(0.0, 1.0),
                 Activation::Relu => pre[i].max(0.0),
             };
-            self.state[i] = (1.0 - alpha) * self.state[i] + alpha * activated;
+            self.state[i] = (1.0 - alpha).mul_add(self.state[i], alpha * activated);
         }
         let os = self.output_dim;
         (0..os)
@@ -237,7 +241,7 @@ impl EsnF32 {
     }
 }
 
-/// int4-quantized ESN — simulates AKD1000 hardware (bounded ReLU, int4 weights)
+/// int4-quantized ESN — simulates AKD1000 hardware (bounded `ReLU`, int4 weights)
 struct EsnInt4 {
     base: EsnF32,     // base model for readout
     w_in_q: Vec<i8>,  // quantized input weights  [-8, 7]
@@ -269,9 +273,9 @@ impl EsnInt4 {
             input_dim: f32_esn.input_dim,
             reservoir_dim: f32_esn.reservoir_dim,
             output_dim: f32_esn.output_dim,
-            w_in: w_in_q.iter().map(|&x| x as f32 * scale_in).collect(),
-            w_res: w_res_q.iter().map(|&x| x as f32 * scale_res).collect(),
-            w_out: w_out_q.iter().map(|&x| x as f32 * scale_out).collect(),
+            w_in: w_in_q.iter().map(|&x| f32::from(x) * scale_in).collect(),
+            w_res: w_res_q.iter().map(|&x| f32::from(x) * scale_res).collect(),
+            w_out: w_out_q.iter().map(|&x| f32::from(x) * scale_out).collect(),
             state: vec![0.0f32; f32_esn.reservoir_dim],
             leak: f32_esn.leak,
             activation: Activation::BoundedRelu, // hardware constraint
@@ -342,14 +346,12 @@ fn classification_agreement(a_seq: &[Vec<f32>], b_seq: &[Vec<f32>]) -> f32 {
                 .iter()
                 .enumerate()
                 .max_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
             let b_class = b
                 .iter()
                 .enumerate()
                 .max_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
             a_class == b_class
         })
         .count();
@@ -360,10 +362,7 @@ fn classification_agreement(a_seq: &[Vec<f32>], b_seq: &[Vec<f32>]) -> f32 {
 
 fn task_throughput(reservoir_dim: usize, iters: usize) {
     println!("── Throughput Comparison ─────────────────────────────────────────────");
-    println!(
-        "  Reservoir size: {} NPs, {} iterations",
-        reservoir_dim, iters
-    );
+    println!("  Reservoir size: {reservoir_dim} NPs, {iters} iterations");
     println!();
 
     let input_dim = 50;
@@ -374,7 +373,7 @@ fn task_throughput(reservoir_dim: usize, iters: usize) {
     };
     let inputs_f64: Vec<Vec<f64>> = inputs
         .iter()
-        .map(|v| v.iter().map(|&x| x as f64).collect())
+        .map(|v| v.iter().map(|&x| f64::from(x)).collect())
         .collect();
 
     // CPU f64 throughput
@@ -487,7 +486,7 @@ fn task_parity(reservoir_dim: usize, iters: usize) {
     let mut outputs_int4: Vec<Vec<f32>> = Vec::with_capacity(iters);
 
     for inp in &inputs {
-        let inp64: Vec<f64> = inp.iter().map(|&x| x as f64).collect();
+        let inp64: Vec<f64> = inp.iter().map(|&x| f64::from(x)).collect();
         outputs64.push(esn64.step(&inp64).iter().map(|&x| x as f32).collect());
         outputs32t.push(esn32_tanh.step(inp));
         outputs32r.push(esn32_relu.step(inp));
@@ -578,18 +577,18 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
     println!();
 
     let input_dim = 50;
-    let output_dim = 1;
+    let _output_dim = 1;
     let mut rng = Xoshiro::new(0xf00d);
 
     // Synthetic binary classification task with known ground truth
     let n_class_0 = iters / 2;
-    let n_class_1 = iters - n_class_0;
+    let _n_class_1 = iters - n_class_0;
     let inputs: Vec<(Vec<f32>, bool)> = (0..iters)
         .map(|i| {
             let class = i < n_class_0;
             let center = if class { 0.3f32 } else { -0.3f32 };
             let inp: Vec<f32> = (0..input_dim)
-                .map(|_| center + rng.next_f32() * 0.4)
+                .map(|_| rng.next_f32().mul_add(0.4, center))
                 .collect();
             (inp, class)
         })
@@ -633,7 +632,7 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
             }
         }
         let w_out: Vec<f32> = (0..rs)
-            .map(|i| xty[i] / (xtx_diag[i] + lambda * n as f32))
+            .map(|i| xty[i] / lambda.mul_add(n as f32, xtx_diag[i]))
             .collect();
         esn.w_out = w_out;
         esn.output_dim = 1;
@@ -641,7 +640,7 @@ fn task_activation_comparison(reservoir_dim: usize, iters: usize) {
         // Evaluate
         esn.reset();
         let mut correct = 0usize;
-        for (inp, class) in inputs.iter() {
+        for (inp, class) in &inputs {
             let out = esn.step(inp);
             let pred = out[0] > 0.0;
             if pred == *class {
@@ -712,7 +711,7 @@ fn task_hybrid_training(reservoir_dim: usize, iters: usize) {
     let hw_forward_us = 54.0f64; // measured ✅
     let sw_backward_us = 50.0f64; // estimated (128-dim readout gradient)
     let set_variable_us = 86.0f64; // measured ✅
-    let pcie_overhead_us = 650.0f64; // measured ✅ (full round-trip)
+    let _pcie_overhead_us = 650.0f64; // measured ✅ (full round-trip)
 
     // We apply the weight update every K steps (amortize set_variable overhead)
     let update_freq = 8; // update every 8 steps (amortizes 86 µs over 8 × forward)
@@ -770,7 +769,7 @@ fn task_hybrid_training(reservoir_dim: usize, iters: usize) {
     );
     println!();
     println!("  Hybrid training (HW forward + SW backward):");
-    println!("    Projected Hz:  {:.0} steps/sec", hybrid_hz);
+    println!("    Projected Hz:  {hybrid_hz:.0} steps/sec");
     println!("    vs pure SW:    {:.1}× faster", hybrid_hz / sw_hz);
     println!(
         "    vs evolution:  {:.1}× faster (but evolution needs no labels)",
@@ -778,10 +777,7 @@ fn task_hybrid_training(reservoir_dim: usize, iters: usize) {
     );
     println!();
     println!("  Note: hybrid Hz is projected from measured HW latencies.");
-    println!(
-        "  Software component measured at {:.0} Hz (computation overhead only).",
-        hybrid_sw_hz
-    );
+    println!("  Software component measured at {hybrid_sw_hz:.0} Hz (computation overhead only).");
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -810,7 +806,7 @@ fn main() -> Result<()> {
     println!("║        Substrate parity, capability gaps, hybrid potential       ║");
     println!("╚══════════════════════════════════════════════════════════════════╝");
     println!();
-    println!("  Reservoir: {} NPs,  Iterations: {}", reservoir, iters);
+    println!("  Reservoir: {reservoir} NPs,  Iterations: {iters}");
     if use_hw {
         println!("  Mode: Including live AKD1000 measurements");
     } else {

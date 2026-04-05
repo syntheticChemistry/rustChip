@@ -3,13 +3,13 @@
 //! BAR0 register map for AKD1000.
 //!
 //! These offsets were established by two methods:
-//! 1. Direct BAR0 probing via MMIO (see BEYOND_SDK.md Discovery 8)
+//! 1. Direct BAR0 probing via MMIO (see `BEYOND_SDK.md` Discovery 8)
 //! 2. C++ engine symbol analysis (`core.so`, 1,048 exports)
 //!
 //! Confirmed values are marked `// confirmed`.
 //! Inferred values are marked `// inferred` and should be validated.
 //!
-//! ## Probing results (BEYOND_SDK.md)
+//! ## Probing results (`BEYOND_SDK.md`)
 //!
 //! ```text
 //! 0x000000: 0x194000a1  — Device ID / version register    (confirmed)
@@ -43,13 +43,14 @@ pub const CONTROL: usize = 0x0010; // inferred: nearby 0x001094
 // ── NP mesh ──────────────────────────────────────────────────────────────────
 
 /// NP count or feature bits — reads `0x5b` (91). // confirmed @ 0x0010c0
-pub const NP_COUNT: usize = 0x0010_C0;
+pub const NP_COUNT: usize = 0x0000_10C0;
 
 /// DMA / mesh configuration word — reads `0x04aa0001`. // confirmed @ 0x004010
 pub const DMA_MESH_CONFIG: usize = 0x4010;
 
 /// NP enable bits (six × 0x00000001). // confirmed @ 0x001e0c–0x001e20
 pub const NP_ENABLE_BASE: usize = 0x1E0C;
+/// Number of consecutive NP enable registers starting at [`NP_ENABLE_BASE`].
 pub const NP_ENABLE_COUNT: usize = 6;
 
 // ── SRAM region ──────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ pub const SRAM_BAR_ADDR: usize = 0x141C;
 pub const EDMA_WRITE_CH0_CTL: usize = 0x0200;
 /// eDMA read channel 0 control.
 pub const EDMA_READ_CH0_CTL: usize = 0x0300;
-/// eDMA interrupt status.
+/// eDMA interrupt status — channel completion and error sticky bits (DW eDMA layout).
 pub const EDMA_INT_STATUS: usize = 0x0010_0010;
 
 // ── Model load ───────────────────────────────────────────────────────────────
@@ -104,9 +105,9 @@ pub const INFER_STATUS: usize = 0x0404;
 
 // ── Interrupts ───────────────────────────────────────────────────────────────
 
-/// Interrupt status register.
+/// `SoC` interrupt status — pending events from NP/eDMA blocks (read/clear semantics device-specific).
 pub const IRQ_STATUS: usize = 0x0020;
-/// Interrupt enable register.
+/// Interrupt mask — enables delivery of `IRQ_STATUS` sources to the host interrupt line.
 pub const IRQ_ENABLE: usize = 0x0024;
 
 // ── Per-NP configuration (repeating) ─────────────────────────────────────────
@@ -118,6 +119,7 @@ pub const NP_CONFIG_STRIDE: usize = 0x100;
 
 // ── Status register bit definitions ──────────────────────────────────────────
 
+/// Bits in the main [`STATUS`] register.
 pub mod status {
     /// Device ready to accept commands.
     pub const READY: u32 = 1 << 0;
@@ -131,6 +133,7 @@ pub mod status {
 
 // ── Control register bit definitions ─────────────────────────────────────────
 
+/// Bits in the main [`CONTROL`] register.
 pub mod control {
     /// Soft reset.
     pub const RESET: u32 = 1 << 0;
@@ -143,14 +146,21 @@ pub mod control {
 // ── Clock mode register values ────────────────────────────────────────────────
 // Discovery 4: three clock modes confirmed.
 
+/// Clock mode values (Discovery 4).
 pub mod clock {
+    /// Full-performance clock.
     pub const PERFORMANCE: u32 = 0;
-    pub const ECONOMY: u32 = 1; // 19% slower, 18% less power
-    pub const LOW_POWER: u32 = 2; // 9.3× slower, 27% less power
+    /// Balanced mode — 19% slower, 18% less power.
+    pub const ECONOMY: u32 = 1;
+    /// Deep power save — 9.3× slower, 27% less power.
+    pub const LOW_POWER: u32 = 2;
 }
 
 #[cfg(test)]
 mod tests {
+    use super::clock;
+    use super::control;
+    use super::status;
     use super::*;
 
     #[test]
@@ -166,7 +176,66 @@ mod tests {
         // From BEYOND_SDK.md direct probing
         assert_eq!(DEVICE_ID, 0x0000);
         assert_eq!(DMA_MESH_CONFIG, 0x4010);
-        assert_eq!(NP_COUNT, 0x0010_C0);
+        assert_eq!(NP_COUNT, 0x0000_10C0);
         assert_eq!(NP_ENABLE_BASE, 0x1E0C);
+    }
+
+    #[test]
+    fn status_register_bits_are_unique_powers_of_two() {
+        let bits = [
+            status::READY,
+            status::BUSY,
+            status::ERROR,
+            status::MODEL_LOADED,
+        ];
+        let mut seen = 0u32;
+        for b in bits {
+            assert_eq!(b & seen, 0, "bit {b:#x} overlaps another flag");
+            seen |= b;
+        }
+    }
+
+    #[test]
+    fn control_register_bits_are_unique_powers_of_two() {
+        let bits = [control::RESET, control::ENABLE, control::POWER_SAVE];
+        let mut seen = 0u32;
+        for b in bits {
+            assert_eq!(b & seen, 0);
+            seen |= b;
+        }
+    }
+
+    #[test]
+    fn clock_mode_values_are_distinct() {
+        assert_ne!(clock::PERFORMANCE, clock::ECONOMY);
+        assert_ne!(clock::ECONOMY, clock::LOW_POWER);
+        assert_ne!(clock::PERFORMANCE, clock::LOW_POWER);
+    }
+
+    #[test]
+    fn np_config_nth_register_offset() {
+        for i in 0..NP_ENABLE_COUNT {
+            assert_eq!(NP_ENABLE_BASE + i * 4, 0x1E0C + i * 4);
+        }
+    }
+
+    #[test]
+    fn np_config_block_stride_addresses() {
+        let base = NP_CONFIG_BASE;
+        assert_eq!(base + 2 * NP_CONFIG_STRIDE, 0xE200);
+    }
+
+    #[test]
+    fn edma_channel_offsets_are_separated() {
+        assert!(EDMA_READ_CH0_CTL > EDMA_WRITE_CH0_CTL);
+        assert!(EDMA_INT_STATUS > EDMA_READ_CH0_CTL);
+    }
+
+    #[test]
+    fn model_input_output_infer_registers_are_monotonic() {
+        assert!(MODEL_LOAD > MODEL_SIZE);
+        assert!(INPUT_ADDR_LO > MODEL_LOAD);
+        assert!(OUTPUT_ADDR_LO > INPUT_SIZE);
+        assert!(INFER_START > OUTPUT_SIZE);
     }
 }

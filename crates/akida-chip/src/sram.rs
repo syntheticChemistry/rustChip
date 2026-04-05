@@ -280,4 +280,25 @@ mod tests {
         assert!(!points.is_empty());
         assert!(points[0].offset == 0);
     }
+
+    #[test]
+    fn sram_kind_display_labels() {
+        assert_eq!(format!("{}", SramKind::Filter), "Filter(64b)");
+        assert_eq!(format!("{}", SramKind::Unknown), "Unknown");
+    }
+
+    #[test]
+    fn from_discovered_scales_per_np_sram() {
+        let layout = Bar1Layout::from_discovered(10, 1_048_576);
+        assert_eq!(layout.np_count, 10);
+        assert_eq!(layout.per_np_sram_bytes, 104_857);
+    }
+
+    #[test]
+    fn from_np_count_matches_topology_when_counts_align() {
+        let from_mesh = Bar1Layout::from_topology(&MeshTopology::AKD1000);
+        let from_count = Bar1Layout::from_np_count(MeshTopology::AKD1000.functional);
+        assert_eq!(from_mesh.np_stride, from_count.np_stride);
+        assert_eq!(from_mesh.per_np_sram_bytes, from_count.per_np_sram_bytes);
+    }
 }

@@ -5,7 +5,9 @@
 //! Page-aligned, mlock'd buffers with IOMMU DMA mapping for zero-copy
 //! data transfer between host and AKD1000.
 
-use super::ioctls::{self, ioctl_vfio_iommu_map_dma, ioctl_vfio_iommu_unmap_dma, VfioDmaMap, VfioDmaUnmap};
+use super::ioctls::{
+    self, VfioDmaMap, VfioDmaUnmap, ioctl_vfio_iommu_map_dma, ioctl_vfio_iommu_unmap_dma,
+};
 use crate::error::{AkidaError, Result};
 use rustix::mm::{mlock, munlock};
 use std::os::unix::io::RawFd;

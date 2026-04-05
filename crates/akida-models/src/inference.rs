@@ -88,7 +88,7 @@ impl Model {
     /// Get input size in bytes.
     ///
     /// Uses model layer metadata when available, falls back to
-    /// program size heuristic when FlatBuffers shapes aren't parsed.
+    /// program size heuristic when `FlatBuffers` shapes aren't parsed.
     pub fn input_size(&self) -> usize {
         let (input_shape, _) = self.io_shapes();
         input_shape.iter().product()
@@ -97,7 +97,7 @@ impl Model {
     /// Get output size in bytes.
     ///
     /// Uses model layer metadata when available, falls back to
-    /// program size heuristic when FlatBuffers shapes aren't parsed.
+    /// program size heuristic when `FlatBuffers` shapes aren't parsed.
     pub fn output_size(&self) -> usize {
         let (_, output_shape) = self.io_shapes();
         output_shape.iter().product()
@@ -107,7 +107,7 @@ impl Model {
     ///
     /// Traverses the layer graph: the first layer's input shape is
     /// the model input; the last layer's output shape is the model output.
-    /// When shapes are not yet parsed (pending FlatBuffers schema), derives
+    /// When shapes are not yet parsed (pending `FlatBuffers` schema), derives
     /// a reasonable estimate from program size and layer count.
     fn io_shapes(&self) -> (Vec<usize>, Vec<usize>) {
         let layers = self.layers();
@@ -155,7 +155,7 @@ impl Model {
             .weights()
             .last()
             .and_then(|w| w.shape.as_ref())
-            .map_or(vec![self.layer_count().max(1)], |s| vec![s[0]]);
+            .map_or_else(|| vec![self.layer_count().max(1)], |s| vec![s[0]]);
 
         tracing::debug!(
             "Estimated I/O shapes from model metadata: input={:?}, output={:?}",
@@ -188,5 +188,51 @@ mod tests {
 
         assert!(input_size > 0);
         assert!(output_size > 0);
+    }
+
+    #[test]
+    fn input_output_sizes_remain_positive_for_minimal_parseable_buffer() {
+        let mut data = vec![0u8; 64];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+
+        let model = Model::from_bytes(&data).expect("model");
+        assert!(model.input_size() >= 1);
+        assert!(model.output_size() >= 1);
+    }
+
+    #[test]
+    fn io_shapes_heuristic_caps_input_estimate_at_1024_for_large_program() {
+        let mut data = vec![0u8; 2048];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+        // Weight heuristic pattern so total_weight_count() > 0
+        data[500..503].copy_from_slice(&[0xfe, 0x01, 0x00]);
+        data[503..506].copy_from_slice(&[0xfe, 0x01, 0x00]);
+
+        let model = Model::from_bytes(&data).expect("model");
+        assert!(model.total_weight_count() > 0);
+        assert_eq!(model.input_size(), 1024);
+        assert!(model.output_size() >= 1);
+    }
+
+    #[test]
+    fn io_shapes_output_matches_layer_count_heuristic() {
+        let mut data = vec![0u8; 700];
+        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        let ver = b"2.18.2\0";
+        data[30..30 + ver.len()].copy_from_slice(ver);
+        // Length-prefixed layer name so `extract_layer_names` yields at least one layer
+        let s = b"input_fc";
+        let len = s.len() as u32;
+        data[100..104].copy_from_slice(&len.to_le_bytes());
+        data[104..104 + s.len()].copy_from_slice(s);
+        data[104 + s.len()] = 0;
+
+        let model = Model::from_bytes(&data).expect("model");
+        assert!(model.layer_count() >= 1);
+        assert_eq!(model.output_size(), model.layer_count().max(1));
     }
 }

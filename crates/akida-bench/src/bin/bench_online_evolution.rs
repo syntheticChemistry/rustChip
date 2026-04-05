@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! bench_online_evolution — Live classifier adaptation at 136 gen/sec
+//! `bench_online_evolution` — Live classifier adaptation at 136 gen/sec
 //!
-//! Validates the online evolution claim from baseCamp/systems/online_evolution.md:
-//!   136 generations/second of hardware-validated evolution via set_variable().
+//! Validates the online evolution claim from `baseCamp/systems/online_evolution.md`:
+//!   136 generations/second of hardware-validated evolution via `set_variable()`.
 //!
 //! Usage:
-//!   cargo run --bin bench_online_evolution             # requires live AKD1000
-//!   cargo run --bin bench_online_evolution -- --sw     # SoftwareBackend simulation
-//!   cargo run --bin bench_online_evolution -- --task speaker_adapt
-//!   cargo run --bin bench_online_evolution -- --task domain_shift
-//!   cargo run --bin bench_online_evolution -- --task ensemble
+//!   cargo run --bin `bench_online_evolution`             # requires live AKD1000
+//!   cargo run --bin `bench_online_evolution` -- --sw     # `SoftwareBackend` simulation
+//!   cargo run --bin `bench_online_evolution` -- --task `speaker_adapt`
+//!   cargo run --bin `bench_online_evolution` -- --task `domain_shift`
+//!   cargo run --bin `bench_online_evolution` -- --task ensemble
 //!
 //! What we measure:
 //!   1. Generation rate: how many weight-swap + evaluate cycles per second?
@@ -42,7 +42,7 @@ impl Xoshiro {
         rng
     }
 
-    fn next_u64(&mut self) -> u64 {
+    const fn next_u64(&mut self) -> u64 {
         let result = (self.s[0].wrapping_add(self.s[3]))
             .rotate_left(23)
             .wrapping_add(self.s[0]);
@@ -72,7 +72,9 @@ impl Xoshiro {
     }
 
     fn gen_vec(&mut self, len: usize) -> Vec<f32> {
-        (0..len).map(|_| self.next_f32() * 2.0 - 1.0).collect()
+        (0..len)
+            .map(|_| self.next_f32().mul_add(2.0, -1.0))
+            .collect()
     }
 }
 
@@ -114,7 +116,11 @@ impl SyntheticTask {
 
         for _ in 0..n {
             let x: Vec<f32> = (0..self.input_dim)
-                .map(|i| self.dist_mean[i] + self.rng.next_normal() * self.dist_std)
+                .map(|i| {
+                    self.rng
+                        .next_normal()
+                        .mul_add(self.dist_std, self.dist_mean[i])
+                })
                 .collect();
             let label = self.classify_true(&x);
             inputs.push(x);
@@ -136,17 +142,16 @@ impl SyntheticTask {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(i, _)| i)
-            .unwrap_or(0)
+            .map_or(0, |(i, _)| i)
     }
 
     /// Simulate domain shift by moving the distribution mean
     fn inject_domain_shift(&mut self, magnitude: f32) {
-        for m in self.dist_mean.iter_mut() {
+        for m in &mut self.dist_mean {
             let delta = self.rng.next_normal() * magnitude;
             *m += delta;
         }
-        self.dist_std *= 1.0 + self.rng.next_f32() * 0.3;
+        self.dist_std *= self.rng.next_f32().mul_add(0.3, 1.0);
     }
 }
 
@@ -187,8 +192,7 @@ impl EvolvableClassifier {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(i, _)| i)
-            .unwrap_or(0)
+            .map_or(0, |(i, _)| i)
     }
 
     fn accuracy(&self, inputs: &[Vec<f32>], labels: &[usize]) -> f32 {
@@ -200,7 +204,7 @@ impl EvolvableClassifier {
         correct as f32 / inputs.len() as f32
     }
 
-    /// Simulate set_variable() overhead: 86 µs on hardware, ~0 µs in software
+    /// Simulate `set_variable()` overhead: 86 µs on hardware, ~0 µs in software
     fn set_weights_simulated(&mut self, new_weights: Vec<f32>, _use_hw: bool) {
         self.weights = new_weights;
         // Hardware would add: std::thread::sleep(Duration::from_micros(86));
@@ -296,8 +300,7 @@ fn run_evolution(
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+            .map_or(0, |(i, _)| i);
 
         if scores[best_idx] > best_accuracy {
             best_accuracy = scores[best_idx];
@@ -430,7 +433,7 @@ fn task_domain_shift(verbose: bool) -> Result<EvolutionResult> {
     Ok(result)
 }
 
-fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
+fn task_ensemble_construction(_verbose: bool) -> Result<EvolutionResult> {
     println!("  Task: Ensemble construction (10 independent trajectories)");
     println!("  Scenario: 10 weight sets evolved on 10 data subsets, majority vote");
 
@@ -452,7 +455,7 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
         let result = run_evolution(
             &mut sub_task,
             classifier,
-            &format!("ensemble_member_{}", i),
+            &format!("ensemble_member_{i}"),
             0.85,
             200,
             3,
@@ -469,7 +472,7 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
     let mut correct = 0usize;
     for (x, &label) in test_inputs.iter().zip(test_labels.iter()) {
         let votes: Vec<usize> = member_classifiers.iter().map(|c| c.infer(x)).collect();
-        let mut counts = vec![0usize; 5];
+        let mut counts = [0usize; 5];
         for &v in &votes {
             counts[v] += 1;
         }
@@ -477,8 +480,7 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
             .iter()
             .enumerate()
             .max_by_key(|(_, c)| *c)
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+            .map_or(0, |(i, _)| i);
         if ensemble_pred == label {
             correct += 1;
         }
@@ -499,7 +501,7 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
     );
     println!(
         "  Ensemble inference cost: 10 × 86 µs set_variable + 10 × 54 µs infer = {:.0} µs",
-        10.0 * 86.0 + 10.0 * 54.0
+        10.0f64.mul_add(86.0, 10.0 * 54.0)
     );
 
     Ok(EvolutionResult {
@@ -568,7 +570,7 @@ fn pretrain_ridge(
     // W = (X^T X + λI)^{-1} X^T Y — diagonal approx
     let mut new_weights = vec![0.0f32; d * c];
     for i in 0..d {
-        let scale = 1.0 / (xtx_diag[i] + lambda * n_samples as f32);
+        let scale = 1.0 / lambda.mul_add(n_samples as f32, xtx_diag[i]);
         for j in 0..c {
             new_weights[i * c + j] = xty[i * c + j] * scale;
         }
@@ -689,7 +691,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let all_passed = all_results.iter().all(|r| r.passed());
+    let all_passed = all_results.iter().all(EvolutionResult::passed);
     println!();
     println!("── Conclusion ───────────────────────────────────────────────────────");
     if all_passed {

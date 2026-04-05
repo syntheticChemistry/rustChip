@@ -51,7 +51,7 @@ impl<F: FitnessEvaluator> NpuEvolver<F> {
     pub fn new(config: EvolutionConfig, fitness_evaluator: F) -> Self {
         let population = (0..config.population_size)
             .map(|i| Individual {
-                id: i,
+                _id: i,
                 patches: Vec::new(),
                 fitness: f64::NEG_INFINITY,
             })
@@ -119,13 +119,13 @@ impl<F: FitnessEvaluator> NpuEvolver<F> {
 
     /// Current generation number.
     #[must_use]
-    pub fn generation(&self) -> u64 {
+    pub const fn generation(&self) -> u64 {
         self.generation
     }
 
     /// Best fitness achieved so far.
     #[must_use]
-    pub fn best_fitness(&self) -> f64 {
+    pub const fn best_fitness(&self) -> f64 {
         self.best_fitness
     }
 
@@ -150,10 +150,10 @@ impl<F: FitnessEvaluator> NpuEvolver<F> {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        if let Some(best) = self.population.first() {
-            if best.fitness > self.best_fitness {
-                self.best_fitness = best.fitness;
-            }
+        if let Some(best) = self.population.first()
+            && best.fitness > self.best_fitness
+        {
+            self.best_fitness = best.fitness;
         }
 
         // Tournament selection: keep top half, mutate to fill bottom half
@@ -204,13 +204,13 @@ pub struct WeightPatch {
 impl WeightPatch {
     /// Create a new weight patch.
     #[must_use]
-    pub fn new(offset: usize, data: Vec<u8>) -> Self {
+    pub const fn new(offset: usize, data: Vec<u8>) -> Self {
         Self { offset, data }
     }
 
     /// Size of this patch in bytes.
     #[must_use]
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         self.data.len()
     }
 }
@@ -273,7 +273,7 @@ pub trait FitnessEvaluator: Send + Sync {
 /// An individual in the evolution population.
 #[derive(Debug, Clone)]
 struct Individual {
-    id: usize,
+    _id: usize,
     patches: Vec<WeightPatch>,
     fitness: f64,
 }
@@ -306,12 +306,68 @@ fn mutate_patches(patches: &[WeightPatch], mutation_rate: f64, magnitude: u8) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::{BackendType, ModelHandle, NpuBackend};
+    use crate::backends::software::SoftwareBackend;
 
     struct MaxOutputFitness;
 
     impl FitnessEvaluator for MaxOutputFitness {
         fn evaluate(&self, _input: &[f32], output: &[f32]) -> f64 {
             output.iter().map(|&v| f64::from(v)).sum()
+        }
+    }
+
+    /// Wraps `SoftwareBackend` so `mutate_weights` is a no-op (evolver unit tests without SRAM).
+    #[derive(Debug)]
+    struct EvolverTestBackend {
+        inner: SoftwareBackend,
+    }
+
+    impl EvolverTestBackend {
+        fn new_loaded() -> Self {
+            let mut inner = SoftwareBackend::new(4, 2, 1);
+            inner
+                .load_weights(&[0.1f32; 8], &[0.05f32; 16], &[0.2f32; 4])
+                .unwrap();
+            Self { inner }
+        }
+    }
+
+    impl NpuBackend for EvolverTestBackend {
+        fn init(_device_id: &str) -> Result<Self> {
+            Ok(Self::new_loaded())
+        }
+
+        fn capabilities(&self) -> &crate::capabilities::Capabilities {
+            self.inner.capabilities()
+        }
+
+        fn load_model(&mut self, model: &[u8]) -> Result<ModelHandle> {
+            self.inner.load_model(model)
+        }
+
+        fn load_reservoir(&mut self, w_in: &[f32], w_res: &[f32]) -> Result<()> {
+            self.inner.load_reservoir(w_in, w_res)
+        }
+
+        fn infer(&mut self, input: &[f32]) -> Result<Vec<f32>> {
+            self.inner.infer(input)
+        }
+
+        fn measure_power(&self) -> Result<f32> {
+            self.inner.measure_power()
+        }
+
+        fn backend_type(&self) -> BackendType {
+            self.inner.backend_type()
+        }
+
+        fn is_ready(&self) -> bool {
+            self.inner.is_ready()
+        }
+
+        fn mutate_weights(&mut self, _offset: usize, _data: &[u8]) -> Result<()> {
+            Ok(())
         }
     }
 
@@ -346,5 +402,59 @@ mod tests {
         assert_eq!(mutated.len(), 2);
         assert_eq!(mutated[0].offset, 0);
         assert_eq!(mutated[1].offset, 100);
+    }
+
+    #[test]
+    fn evolve_step_runs_without_error() {
+        let config = EvolutionConfig {
+            population_size: 4,
+            ..EvolutionConfig::default()
+        };
+        let mut evolver = NpuEvolver::new(config, MaxOutputFitness);
+        let mut backend = EvolverTestBackend::new_loaded();
+        let input = [0.5f32, -0.25];
+        let res = evolver.evolve_step(&mut backend, &input).unwrap();
+        assert_eq!(res.generation, 1);
+        assert_eq!(res.population_size, 4);
+        assert!(res.mean_fitness.is_finite());
+    }
+
+    #[test]
+    fn seed_population_then_evolve_advances_generation() {
+        let config = EvolutionConfig {
+            population_size: 4,
+            ..EvolutionConfig::default()
+        };
+        let mut evolver = NpuEvolver::new(config, MaxOutputFitness);
+        evolver.seed_population(&[WeightPatch::new(0, vec![1, 2, 3])]);
+        let mut backend = EvolverTestBackend::new_loaded();
+        let input = [0.0f32, 0.0];
+        let _ = evolver.evolve_step(&mut backend, &input).unwrap();
+        let _ = evolver.evolve_step(&mut backend, &input).unwrap();
+        assert_eq!(evolver.generation(), 2);
+    }
+
+    #[test]
+    fn best_patches_returns_some_after_evolution() {
+        let config = EvolutionConfig {
+            population_size: 4,
+            ..EvolutionConfig::default()
+        };
+        let mut evolver = NpuEvolver::new(config, MaxOutputFitness);
+        evolver.seed_population(&[WeightPatch::new(0, vec![1u8])]);
+        let mut backend = EvolverTestBackend::new_loaded();
+        let _ = evolver.evolve_step(&mut backend, &[0.1f32, 0.2]).unwrap();
+        assert!(evolver.best_patches().is_some());
+    }
+
+    #[test]
+    fn evolution_result_clone() {
+        let r = EvolutionResult {
+            generation: 2,
+            best_fitness: 1.0,
+            mean_fitness: 0.5,
+            population_size: 4,
+        };
+        assert_eq!(r.clone().generation, 2);
     }
 }

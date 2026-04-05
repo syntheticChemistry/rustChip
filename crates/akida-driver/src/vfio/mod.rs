@@ -51,7 +51,7 @@
 //! - Minimal unsafe (well-encapsulated VFIO ioctls)
 //! - Safe public API
 //! - No C dependencies for mmap/mlock (pure Rust via rustix)
-//! - VFIO ioctls use libc: rustix::ioctl requires Ioctl trait impl per variant;
+//! - VFIO ioctls use libc: `rustix::ioctl` requires Ioctl trait impl per variant;
 //!   VFIO has 9+ ioctls with varied semantics (int, struct, fd ptr, C string).
 
 mod container;
@@ -65,7 +65,7 @@ use crate::backends::read_hwmon_power;
 use crate::capabilities::Capabilities;
 use crate::error::{AkidaError, Result};
 use crate::mmio::{Bar, MappedRegion, regs};
-use container::{query_device_info, VfioContainer, VfioGroup};
+use container::{VfioContainer, VfioGroup, query_device_info};
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
@@ -112,7 +112,7 @@ pub struct VfioBackend {
 }
 
 impl VfioBackend {
-    /// Find IOMMU group for a PCIe device
+    /// Find IOMMU group for a `PCIe` device
     fn find_iommu_group(pcie_address: &str) -> Result<u32> {
         container::find_iommu_group(pcie_address)
     }
@@ -129,7 +129,7 @@ impl VfioBackend {
         DmaBuffer::new(self.container.as_raw_fd(), aligned_size, iova)
     }
 
-    /// Write a 64-bit IOVA address and size to MMIO registers (addr_lo, addr_hi, size_reg).
+    /// Write a 64-bit IOVA address and size to MMIO registers (`addr_lo`, `addr_hi`, `size_reg`).
     #[expect(
         clippy::cast_possible_truncation,
         reason = "IOVA and size fit hardware register widths"
@@ -219,7 +219,7 @@ impl VfioBackend {
 
     /// Whether BAR1 SRAM is currently mapped.
     #[must_use]
-    pub fn has_sram_mapped(&self) -> bool {
+    pub const fn has_sram_mapped(&self) -> bool {
         self.mesh_region.is_some()
     }
 
@@ -516,9 +516,8 @@ impl NpuBackend for VfioBackend {
         use crate::backend::LoadVerification;
 
         self.map_bar1()?;
-        let region = match self.mesh_region.as_ref() {
-            Some(r) => r,
-            None => return Ok(LoadVerification::unsupported()),
+        let Some(region) = self.mesh_region.as_ref() else {
+            return Ok(LoadVerification::unsupported());
         };
 
         let sample_size = expected.len().min(4096).min(region.size());
@@ -661,7 +660,7 @@ mod tests {
 /// 3. Write vendor:device to `vfio-pci/new_id`
 /// 4. Bind the device
 ///
-/// Requires root or CAP_SYS_ADMIN.
+/// Requires root or `CAP_SYS_ADMIN`.
 ///
 /// # Errors
 ///
@@ -725,7 +724,7 @@ pub fn unbind_from_vfio(pcie_address: &str) -> crate::error::Result<()> {
     Ok(())
 }
 
-/// Find the IOMMU group number for a PCIe device.
+/// Find the IOMMU group number for a `PCIe` device.
 ///
 /// Reads `/sys/bus/pci/devices/{addr}/iommu_group` symlink.
 ///
@@ -745,7 +744,10 @@ pub fn iommu_group(pcie_address: &str) -> crate::error::Result<u32> {
         .and_then(|n| n.to_str())
         .and_then(|s| s.parse::<u32>().ok())
         .ok_or_else(|| {
-            AkidaError::hardware_error(format!("Cannot parse IOMMU group from {target:?}"))
+            AkidaError::hardware_error(format!(
+                "Cannot parse IOMMU group from {}",
+                target.display()
+            ))
         })?;
 
     tracing::debug!("{pcie_address} → IOMMU group {group}");

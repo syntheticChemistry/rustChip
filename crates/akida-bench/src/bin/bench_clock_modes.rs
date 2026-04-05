@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Clock mode benchmark — reproduces Discovery 4 from BEYOND_SDK.md.
+//! Clock mode benchmark — reproduces Discovery 4 from `BEYOND_SDK.md`.
 //!
-//! "3 modes: Performance / Economy / LowPower"
+//! "3 modes: Performance / Economy / `LowPower`"
 //! "Economy: 19% slower, 18% less power — sweet spot for physics workloads"
 //!
-//! Reference table (BEYOND_SDK.md, Discovery 4):
+//! Reference table (`BEYOND_SDK.md`, Discovery 4):
 //!   Performance:  909 µs,  901 mW  (default)
 //!   Economy:     1080 µs,  739 mW  ← sweet spot: 19% slower, 18% less power
-//!   LowPower:    8472 µs,  658 mW  (9.3× slower, 27% less power — avoid)
+//!   `LowPower`:    8472 µs,  658 mW  (9.3× slower, 27% less power — avoid)
 //!
 //! The SDK documents only one clock mode. All three modes were discovered
-//! via direct sysfs probing (akida_clock_mode attribute).
+//! via direct sysfs probing (`akida_clock_mode` attribute).
 
 use akida_driver::ClockMode;
 use anyhow::Result;
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     println!("Clock mode benchmark (Discovery 4 — BEYOND_SDK.md)");
     println!("===================================================");
     println!("Model : {INPUT_DIM}→256→256→256→{OUTPUT_DIM}");
-    println!("Iter  : {} per mode", ITERATIONS);
+    println!("Iter  : {ITERATIONS} per mode");
     println!();
 
     let manager = akida_driver::DeviceManager::discover()?;
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     for (mode, name) in &modes {
         // Attempt to set clock mode via sysfs (requires write permission)
         if let Err(e) = set_clock_mode(device.as_raw_fd(), mode) {
-            println!("  {:>12}  (cannot set clock mode: {})", name, e);
+            println!("  {name:>12}  (cannot set clock mode: {e})");
             continue;
         }
 

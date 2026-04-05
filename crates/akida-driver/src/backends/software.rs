@@ -32,7 +32,7 @@
 //! AKD1000 hardware      →  int4 weights, hardware NP arithmetic
 //! ```
 //!
-//! SoftwareBackend ≈ hardware in f32. The f32→int4 gap is the remaining
+//! `SoftwareBackend` ≈ hardware in f32. The f32→int4 gap is the remaining
 //! quantization error (typically 1–3% relative for well-conditioned weights).
 
 use crate::backend::{BackendType, ModelHandle, NpuBackend};
@@ -122,7 +122,8 @@ impl SoftwareBackend {
     }
 
     /// Set the leak rate (default 0.3, matches hotSpring default; ecosystem context — not a runtime dependency).
-    pub fn with_leak_rate(mut self, alpha: f32) -> Self {
+    #[must_use]
+    pub const fn with_leak_rate(mut self, alpha: f32) -> Self {
         self.leak_rate = alpha;
         self
     }
@@ -181,14 +182,14 @@ impl SoftwareBackend {
         Ok(())
     }
 
-    /// Swap readout weights only (equivalent to AKD1000 set_variable(), Discovery 6).
+    /// Swap readout weights only (equivalent to AKD1000 `set_variable()`, Discovery 6).
     ///
     /// The reservoir weights stay fixed; only `w_out` changes. This enables
     /// regime-specific readout heads — 86 µs on hardware, ~0 ns on software.
     ///
     /// # Errors
     ///
-    /// Returns error if new w_out size doesn't match `output_size × reservoir_size`.
+    /// Returns error if new `w_out` size doesn't match `output_size × reservoir_size`.
     pub fn swap_readout(&mut self, w_out: &[f32]) -> Result<()> {
         let expected = self.output_size * self.reservoir_size;
         if w_out.len() != expected {
@@ -205,6 +206,10 @@ impl SoftwareBackend {
     /// Swap to a different output dimensionality (e.g., 1→3 for multi-output).
     ///
     /// Reconfigures the backend for a different number of output heads.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if `w_out` length does not match `new_output_size × reservoir_size`.
     pub fn reconfigure_output(&mut self, new_output_size: usize, w_out: &[f32]) -> Result<()> {
         let expected = new_output_size * self.reservoir_size;
         if w_out.len() != expected {
@@ -231,21 +236,21 @@ impl SoftwareBackend {
         let alpha = self.leak_rate;
         let mut pre = vec![0.0f32; rs];
 
-        for i in 0..rs {
+        for (i, pre_slot) in pre.iter_mut().enumerate() {
             let mut val = 0.0f32;
             // W_in contribution
-            for j in 0..is.min(input.len()) {
-                val += self.w_in[i * is + j] * input[j];
+            for (j, &inp) in input.iter().enumerate().take(is.min(input.len())) {
+                val += self.w_in[i * is + j] * inp;
             }
             // W_res contribution
             for j in 0..rs {
                 val += self.w_res[i * rs + j] * self.state[j];
             }
-            pre[i] = val;
+            *pre_slot = val;
         }
 
-        for i in 0..rs {
-            self.state[i] = (1.0 - alpha) * self.state[i] + alpha * pre[i].tanh();
+        for (i, pre_v) in pre.iter().enumerate() {
+            self.state[i] = (1.0 - alpha).mul_add(self.state[i], alpha * pre_v.tanh());
         }
     }
 
@@ -290,12 +295,12 @@ impl SoftwareBackend {
     }
 
     /// Return output dimensionality.
-    pub fn output_size(&self) -> usize {
+    pub const fn output_size(&self) -> usize {
         self.output_size
     }
 
     /// Return reservoir size (equivalent to NP count on hardware).
-    pub fn reservoir_size(&self) -> usize {
+    pub const fn reservoir_size(&self) -> usize {
         self.reservoir_size
     }
 }
@@ -422,7 +427,7 @@ impl NpuBackend for SoftwareBackend {
 
 /// Serialize ESN weights into a compact blob for `SoftwareBackend::load_model()`.
 ///
-/// Format: [RS u32 LE][IS u32 LE][OS u32 LE][leak_rate f32 LE][w_in f32...][w_res f32...][w_out f32...]
+/// Format: [RS u32 LE][IS u32 LE][OS u32 LE][leak_rate f32 LE][`w_in` f32...][w_res f32...][`w_out` f32...]
 #[must_use]
 pub fn pack_software_model(
     reservoir_size: usize,
@@ -548,7 +553,131 @@ mod tests {
 
     #[test]
     fn ready_after_weights() {
-        let mut b = make_identity_esn(10, 3, 1);
+        let b = make_identity_esn(10, 3, 1);
         assert!(b.is_ready());
+    }
+
+    #[test]
+    fn load_model_rejects_short_header() {
+        let mut b = SoftwareBackend::new(4, 2, 1);
+        assert!(b.load_model(&[0u8; 8]).is_err());
+    }
+
+    #[test]
+    fn load_model_rejects_truncated_weights() {
+        let mut b = SoftwareBackend::new(4, 2, 1);
+        let mut blob = vec![0u8; 16];
+        blob[0..4].copy_from_slice(&4u32.to_le_bytes());
+        blob[4..8].copy_from_slice(&2u32.to_le_bytes());
+        blob[8..12].copy_from_slice(&1u32.to_le_bytes());
+        blob[12..16].copy_from_slice(&0.3f32.to_le_bytes());
+        assert!(b.load_model(&blob).is_err());
+    }
+
+    #[test]
+    fn load_reservoir_rejects_bad_dimensions() {
+        let mut b = SoftwareBackend::new(4, 2, 1);
+        assert!(b.load_reservoir(&[0.0f32; 7], &[0.0f32; 16]).is_err());
+    }
+
+    #[test]
+    fn run_sequence_accumulates_state() {
+        let mut b = SoftwareBackend::new(3, 2, 1);
+        let w_in = vec![0.0f32; 6];
+        let w_res = vec![0.0f32; 9];
+        let w_out = vec![1.0f32, 0.0, 0.0];
+        b.load_weights(&w_in, &w_res, &w_out).unwrap();
+        let seq = vec![1.0f32, 0.0, 0.0, 1.0];
+        let out = b.run_sequence(&seq);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].is_finite());
+    }
+
+    #[test]
+    fn reconfigure_output_changes_dim() {
+        let mut b = SoftwareBackend::new(4, 2, 1);
+        let w_in = vec![0.0f32; 8];
+        let w_res = vec![0.0f32; 16];
+        let w_out = vec![1.0f32; 4];
+        b.load_weights(&w_in, &w_res, &w_out).unwrap();
+        let new_out = vec![0.5f32; 8];
+        b.reconfigure_output(2, &new_out).unwrap();
+        assert_eq!(b.output_size(), 2);
+        let o = b.infer(&[0.0f32, 0.0]).unwrap();
+        assert_eq!(o.len(), 2);
+    }
+
+    #[test]
+    fn infer_without_weights_returns_error() {
+        let mut b = SoftwareBackend::new(3, 2, 1);
+        assert!(b.infer(&[0.0f32, 0.0]).is_err());
+    }
+
+    #[test]
+    fn load_weights_rejects_each_weight_slot() {
+        let mut b = SoftwareBackend::new(2, 2, 1);
+        assert!(
+            b.load_weights(&[0.0f32; 3], &[0.0f32; 4], &[0.0f32; 2])
+                .is_err()
+        );
+        assert!(
+            b.load_weights(&[0.0f32; 4], &[0.0f32; 3], &[0.0f32; 2])
+                .is_err()
+        );
+        assert!(
+            b.load_weights(&[0.0f32; 4], &[0.0f32; 4], &[0.0f32; 1])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn swap_readout_rejects_bad_len() {
+        let mut b = make_identity_esn(4, 2, 1);
+        assert!(b.swap_readout(&[0.0f32; 3]).is_err());
+    }
+
+    #[test]
+    fn reconfigure_output_rejects_bad_len() {
+        let mut b = SoftwareBackend::new(4, 2, 1);
+        assert!(b.reconfigure_output(2, &[0.0f32; 7]).is_err());
+    }
+
+    #[test]
+    fn default_hotspring_and_with_leak_rate() {
+        let b = SoftwareBackend::default_hotspring().with_leak_rate(0.5f32);
+        assert_eq!(b.reservoir_size(), 50);
+        let b2 = SoftwareBackend::new(4, 2, 1).with_leak_rate(0.2f32);
+        assert_eq!(b2.reservoir_size(), 4);
+    }
+
+    #[test]
+    fn npu_backend_init_default_architecture() {
+        let b = SoftwareBackend::init("unused").expect("software init");
+        assert_eq!(b.reservoir_size(), 50);
+        assert_eq!(b.output_size(), 1);
+    }
+
+    #[test]
+    fn measure_power_returns_zero() {
+        let b = SoftwareBackend::new(4, 2, 1);
+        assert!((b.measure_power().unwrap()).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn load_reservoir_rs_zero_is_rejected() {
+        let mut b = SoftwareBackend::new(0, 2, 1);
+        assert!(b.load_reservoir(&[], &[]).is_err());
+    }
+
+    #[test]
+    fn load_model_header_parse_errors() {
+        let mut b = SoftwareBackend::new(2, 2, 1);
+        assert!(b.load_model(&[0u8; 15]).is_err());
+        let mut blob = vec![0xffu8; 20];
+        blob[0..4].copy_from_slice(&2u32.to_le_bytes());
+        blob[4..8].copy_from_slice(&2u32.to_le_bytes());
+        blob[8..12].copy_from_slice(&1u32.to_le_bytes());
+        blob[12..16].copy_from_slice(&0.3f32.to_le_bytes());
+        assert!(b.load_model(&blob).is_err());
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Test NPU setup
+//! Example: run the [`NpuSetup`] helper (bind / configure NPU for development).
 
 use akida_driver::setup::NpuSetup;
 

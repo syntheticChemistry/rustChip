@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! bench_multi_tenancy — How many independent systems can one AKD1000 hold?
+//! `bench_multi_tenancy` — How many independent systems can one AKD1000 hold?
 //!
-//! This benchmark validates the multi-tenancy claim from baseCamp/systems/multi_tenancy.md:
+//! This benchmark validates the multi-tenancy claim from `baseCamp/systems/multi_tenancy.md`:
 //!   7 distinct systems co-loaded on one chip, each producing correct outputs simultaneously.
 //!
 //! Usage:
-//!   cargo run --bin bench_multi_tenancy             # requires live AKD1000
-//!   cargo run --bin bench_multi_tenancy -- --sw     # local SoftwareBackend (CPU surrogate)
-//!   cargo run --bin bench_multi_tenancy -- --verbose
+//!   cargo run --bin `bench_multi_tenancy`             # requires live AKD1000
+//!   cargo run --bin `bench_multi_tenancy` -- --sw     # local `SoftwareBackend` (CPU surrogate)
+//!   cargo run --bin `bench_multi_tenancy` -- --verbose
 //!
 //! What we measure:
 //!   1. Can N programs coexist at distinct NP offsets without corrupting each other?
@@ -115,7 +115,9 @@ impl Xoshiro {
     }
 
     fn gen_vec(&mut self, len: usize) -> Vec<f32> {
-        (0..len).map(|_| self.next_f32() * 2.0 - 1.0).collect()
+        (0..len)
+            .map(|_| self.next_f32().mul_add(2.0, -1.0))
+            .collect()
     }
 }
 
@@ -159,15 +161,15 @@ impl SoftwareBackend {
         out
     }
 
-    fn name(&self) -> &'static str {
+    const fn name(&self) -> &'static str {
         self.spec.name
     }
 
-    fn np_count(&self) -> usize {
+    const fn np_count(&self) -> usize {
         self.spec.np_count
     }
 
-    fn expected_hz(&self) -> f64 {
+    const fn expected_hz(&self) -> f64 {
         self.spec.expected_hz
     }
 }
@@ -266,7 +268,7 @@ fn main() -> Result<()> {
         println!("        Falling back to sequential loaded-one-at-a-time measurement.");
         println!("        True simultaneous co-loading validated in metalForge/experiments/002.");
     }
-    println!("  Iterations per system: {}", iters);
+    println!("  Iterations per system: {iters}");
     println!();
 
     // ── Phase 1: Single-system baseline ──────────────────────────────────────
@@ -343,7 +345,7 @@ fn main() -> Result<()> {
         let backends = &mut all_backends[..n.min(SYSTEMS.len())];
         let concurrent_hz = bench_concurrent_systems(backends, iters * n);
         let total_outputs: usize = backends.iter().map(|b| b.spec.output_dim).sum();
-        let nps: usize = backends.iter().map(|b| b.np_count()).sum();
+        let nps: usize = backends.iter().map(SoftwareBackend::np_count).sum();
         println!(
             "  {} systems ({} NPs): {:>10.0} queries/sec → {:>10.0} outputs/sec",
             n,
@@ -359,7 +361,6 @@ fn main() -> Result<()> {
     println!("── Phase 3: NP Utilization Analysis ─────────────────────────────────");
 
     let mut cumulative = 0usize;
-    let mut cumulative_outputs = 0usize;
     println!(
         "{:<5} {:<30} {:>6} {:>10} {:>14} {:>12}",
         "Slot", "System", "NPs", "NP Cum.", "Outputs/sec", "NPs Remaining"
@@ -367,7 +368,6 @@ fn main() -> Result<()> {
 
     for (i, spec) in SYSTEMS.iter().enumerate() {
         cumulative += spec.np_count;
-        cumulative_outputs += spec.output_dim;
         let hz = single_results[i].throughput_hz;
         let remaining = 1000usize.saturating_sub(cumulative);
         println!(
@@ -396,10 +396,9 @@ fn main() -> Result<()> {
     let total_conductor_nps = reservoir_nps + n_heads * head_nps;
 
     println!(
-        "  Architecture: 1 reservoir ({} NPs) + {} heads ({} NPs each)",
-        reservoir_nps, n_heads, head_nps
+        "  Architecture: 1 reservoir ({reservoir_nps} NPs) + {n_heads} heads ({head_nps} NPs each)"
     );
-    println!("  Total NPs: {}", total_conductor_nps);
+    println!("  Total NPs: {total_conductor_nps}");
     println!(
         "  NPs remaining for other systems: {}",
         1000 - total_conductor_nps
@@ -451,13 +450,9 @@ fn main() -> Result<()> {
     let conductor_hz = conductor_iters as f64 / conductor_elapsed.as_secs_f64();
     let conductor_output_hz = conductor_hz * n_heads as f64;
 
+    println!("  Conductor throughput: {conductor_hz:.0} forward passes/sec");
     println!(
-        "  Conductor throughput: {:.0} forward passes/sec",
-        conductor_hz
-    );
-    println!(
-        "  Effective output rate: {:.0} outputs/sec ({} simultaneous outputs/pass)",
-        conductor_output_hz, n_heads
+        "  Effective output rate: {conductor_output_hz:.0} outputs/sec ({n_heads} simultaneous outputs/pass)"
     );
     println!(
         "  vs 11 separate models: {:.0} Hz each = {:.0} total",
@@ -477,24 +472,18 @@ fn main() -> Result<()> {
     let chip_power_mw = 270.0f64; // AKD1000 at Performance clock mode
     let economy_power_mw = 221.4; // 18% less at Economy mode
 
-    println!("  Chip power (Performance mode): {:.0} mW", chip_power_mw);
-    println!(
-        "  Chip power (Economy mode):     {:.0} mW",
-        economy_power_mw
-    );
+    println!("  Chip power (Performance mode): {chip_power_mw:.0} mW");
+    println!("  Chip power (Economy mode):     {economy_power_mw:.0} mW");
     println!();
     println!("  Single system (ESN thermalization, 18,500 Hz):");
     let single_energy = chip_power_mw / 18_500.0 * 1000.0; // µJ
-    println!("    Energy/inference: {:.2} µJ", single_energy);
+    println!("    Energy/inference: {single_energy:.2} µJ");
     println!();
     println!("  7-system fleet (concurrent, Economy mode):");
     let total_hz_estimate: f64 = SYSTEMS.iter().map(|s| s.expected_hz).sum();
     let fleet_energy = economy_power_mw / total_hz_estimate * 1000.0; // µJ per inference
-    println!(
-        "    Estimated total throughput: {:.0} Hz",
-        total_hz_estimate
-    );
-    println!("    Energy/inference (per system): {:.3} µJ", fleet_energy);
+    println!("    Estimated total throughput: {total_hz_estimate:.0} Hz");
+    println!("    Energy/inference (per system): {fleet_energy:.3} µJ");
     println!(
         "    Improvement over single: {:.1}×",
         single_energy / fleet_energy
@@ -530,7 +519,7 @@ fn main() -> Result<()> {
         passed_count,
         SYSTEMS.len()
     );
-    println!("  Total NPs consumed:  {} / 1000", total_nps);
+    println!("  Total NPs consumed:  {total_nps} / 1000");
     println!(
         "  NPs remaining:       {}",
         1000usize.saturating_sub(total_nps)
@@ -538,10 +527,7 @@ fn main() -> Result<()> {
 
     let total_single_hz: f64 = single_results.iter().map(|r| r.throughput_hz).sum();
     let total_outputs: usize = SYSTEMS.iter().map(|s| s.output_dim).sum();
-    println!(
-        "  Total throughput:    {:.0} inferences/sec (summed, sequential)",
-        total_single_hz
-    );
+    println!("  Total throughput:    {total_single_hz:.0} inferences/sec (summed, sequential)");
     println!(
         "  Total outputs/sec:   {:.0} (all classifiers)",
         total_single_hz * total_outputs as f64 / SYSTEMS.len() as f64
@@ -562,10 +548,7 @@ fn main() -> Result<()> {
             SYSTEMS.len()
         );
     } else {
-        println!(
-            "  ❌ MULTI-TENANCY FAILED — NP budget exceeded ({} > 1000)",
-            total_nps
-        );
+        println!("  ❌ MULTI-TENANCY FAILED — NP budget exceeded ({total_nps} > 1000)");
     }
 
     println!();

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Batch amortization deep-dive — reproduces Discovery 3 from BEYOND_SDK.md.
+//! Batch amortization deep-dive — reproduces Discovery 3 from `BEYOND_SDK.md`.
 //!
-//! "Batch=8 amortizes PCIe: 948→390 µs/sample (2.4× throughput)"
+//! "Batch=8 amortizes `PCIe`: 948→390 µs/sample (2.4× throughput)"
 //!
 //! Uses a 50→256→256→256→1 model (108 KB program, physics-scale).
 //! Sweeps batch sizes 1–64 and plots the throughput curve.
 //!
-//! Reference table (BEYOND_SDK.md, Discovery 3):
+//! Reference table (`BEYOND_SDK.md`, Discovery 3):
 //!   batch=1:  0.95ms total,   948 µs/sample,  1,055 /s
 //!   batch=2:  1.14ms total,   568 µs/sample,  1,760 /s
 //!   batch=4:  1.70ms total,   426 µs/sample,  2,346 /s
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     println!("Batch amortization sweep (Discovery 3 — BEYOND_SDK.md)");
     println!("======================================================");
     println!("Model  : {INPUT_DIM}→256→256→256→{OUTPUT_DIM}  (physics-scale ESN)");
-    println!("Iter   : {} per batch size", ITERATIONS);
+    println!("Iter   : {ITERATIONS} per batch size");
     println!();
     println!(
         "  {:>7}  {:>12}  {:>12}  {:>12}  {:>10}",
@@ -72,8 +72,7 @@ fn main() -> Result<()> {
 
         let sweet = if batch == 8 { " ← sweet spot" } else { "" };
         println!(
-            "  {:>7}  {:>12.2}  {:>12.0}  {:>12.0}  {:>9.2}×{}",
-            batch, total_ms, us_per_sample, samples_per_sec, speedup, sweet
+            "  {batch:>7}  {total_ms:>12.2}  {us_per_sample:>12.0}  {samples_per_sec:>12.0}  {speedup:>9.2}×{sweet}"
         );
     }
 

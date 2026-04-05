@@ -77,7 +77,6 @@ pub struct VfioDeviceInfo {
 /// VFIO region info structure
 #[repr(C)]
 #[derive(Debug, Default)]
-#[expect(dead_code, reason = "Struct layout reserved for future region queries")]
 pub struct VfioRegionInfo {
     pub argsz: u32,
     pub flags: u32,
@@ -142,13 +141,19 @@ pub(crate) unsafe fn vfio_group_get_status(group_fd: RawFd, status: *mut VfioGro
 
 /// # Safety
 /// `group_fd` must be valid; `container_fd_ptr` must point to a valid `RawFd`.
-pub(crate) unsafe fn vfio_group_set_container(group_fd: RawFd, container_fd_ptr: *const RawFd) -> i32 {
+pub(crate) unsafe fn vfio_group_set_container(
+    group_fd: RawFd,
+    container_fd_ptr: *const RawFd,
+) -> i32 {
     unsafe { libc::ioctl(group_fd, VFIO_GROUP_SET_CONTAINER as _, container_fd_ptr) }
 }
 
 /// # Safety
 /// `group_fd` must be valid; `pcie_address` must be a valid null-terminated C string.
-pub(crate) unsafe fn vfio_group_get_device_fd(group_fd: RawFd, pcie_address: *const libc::c_char) -> i32 {
+pub(crate) unsafe fn vfio_group_get_device_fd(
+    group_fd: RawFd,
+    pcie_address: *const libc::c_char,
+) -> i32 {
     unsafe { libc::ioctl(group_fd, VFIO_GROUP_GET_DEVICE_FD as _, pcie_address) }
 }
 

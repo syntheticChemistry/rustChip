@@ -205,16 +205,14 @@ impl NpuBackend for UserspaceBackend {
 
     fn is_ready(&self) -> bool {
         // Check status register
-        if let Ok(status) = self.bar0.read_u32(REG_STATUS) {
-            status & STATUS_READY != 0
-        } else {
-            false
-        }
+        self.bar0
+            .read_u32(REG_STATUS)
+            .is_ok_and(|status| status & STATUS_READY != 0)
     }
 }
 
 impl UserspaceBackend {
-    /// Ensure PCIe device is enabled
+    /// Ensure `PCIe` device is enabled
     ///
     /// Deep Debt: Runtime check, not assumption
     fn ensure_device_enabled(pcie_address: &str) -> Result<()> {

@@ -81,3 +81,26 @@ impl AkidaModelError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_error_wraps_reason() {
+        let e = AkidaModelError::parse_error("bad");
+        assert!(e.to_string().contains("bad"));
+    }
+
+    #[test]
+    fn loading_failed_wraps_reason() {
+        let e = AkidaModelError::loading_failed("dma");
+        assert!(e.to_string().contains("dma"));
+    }
+
+    #[test]
+    fn invalid_header_display_mentions_magic() {
+        let e = AkidaModelError::InvalidHeader;
+        assert!(e.to_string().contains("magic"));
+    }
+}

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Full Validation Suite — All BEYOND_SDK Claims
+//! Full Validation Suite — All `BEYOND_SDK` Claims
 //!
 //! Runs every validated hardware discovery and benchmark against the live AKD1000,
-//! or against the `SoftwareBackend` (VirtualNPU) when hardware is unavailable.
+//! or against the `SoftwareBackend` (`VirtualNPU`) when hardware is unavailable.
 //!
 //! ## Validated claims
 //!
 //! | # | Discovery | Claim | Threshold |
 //! |---|-----------|-------|-----------|
 //! | 1 | Channel sweep | Throughput scales with channel count; sweet spot at 128ch | ≥ 15,000 Hz at 128ch |
-//! | 2 | FC depth merge | Multiple FC layers merge into single HW pass (SkipDMA) | latency unchanged ±20% for 1→4 layers |
-//! | 3 | program_external | Hand-crafted FlatBuffer programs execute correctly | output finite, non-NaN |
+//! | 2 | FC depth merge | Multiple FC layers merge into single HW pass (`SkipDMA`) | latency unchanged ±20% for 1→4 layers |
+//! | 3 | `program_external` | Hand-crafted `FlatBuffer` programs execute correctly | output finite, non-NaN |
 //! | 4 | Clock modes | Performance/Economy/LowPower modes measurably differ in latency | ≥ 5% latency diff |
 //! | 5 | Batch thermalization | Thermalization flags accurate at batch=1 and batch=8 | ≥ 95% match |
-//! | 6 | Weight mutation | set_variable() swap latency < 200 µs (target: 86 µs) | < 200 µs |
+//! | 6 | Weight mutation | `set_variable()` swap latency < 200 µs (target: 86 µs) | < 200 µs |
 //! | 7 | DMA sustained | DMA throughput ≥ 30 MB/s sustained for 10 MB transfer | ≥ 30 MB/s |
 //! | 8 | BAR layout | BAR0 at offset 0; BAR2 at expected offset; correct sizes | exact match |
-//! | 9 | Power scaling | Power scales with clock mode (Performance > Economy > LowPower) | P_perf > P_econ > P_lp |
+//! | 9 | Power scaling | Power scales with clock mode (Performance > Economy > `LowPower`) | `P_perf` > `P_econ` > `P_lp` |
 //! |10 | NP mesh | NP count = 1000; 80 DP-NPs + 920 NPs confirmed | correct counts |
 //!
 //! ## Reference numbers (AKD1000, Feb 2026, VFIO backend)
@@ -30,9 +30,9 @@
 //!
 //! ## Usage
 //!
-//!   cargo run --bin validate_all              # hardware (VFIO)
-//!   cargo run --bin validate_all -- --sw      # SoftwareBackend (no hardware)
-//!   cargo run --bin validate_all -- --verbose # show detail for each check
+//!   cargo run --bin `validate_all`              # hardware (VFIO)
+//!   cargo run --bin `validate_all` -- --sw      # `SoftwareBackend` (no hardware)
+//!   cargo run --bin `validate_all` -- --verbose # show detail for each check
 
 use akida_driver::{
     DeviceManager, NpuBackend,
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
                 for _ in 0..n {
                     let _ = sw.infer(&input);
                 }
-                let hz = n as f64 / t0.elapsed().as_secs_f64();
+                let hz = f64::from(n) / t0.elapsed().as_secs_f64();
                 // SW threshold: just verify it runs; release will be >>100 KHz
                 let passed = hz > 100.0;
                 Ok(ValidationResult {
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
                     dev.write(&input)?;
                     dev.read(&mut out)?;
                 }
-                let hz = n as f64 / t0.elapsed().as_secs_f64();
+                let hz = f64::from(n) / t0.elapsed().as_secs_f64();
                 let passed = hz >= 15_000.0;
                 Ok(ValidationResult {
                     passed,
@@ -141,10 +141,10 @@ fn main() -> Result<()> {
             let n = 200;
             let t0 = Instant::now();
             for _ in 0..n { let _ = sw1.infer(&input); }
-            let lat1 = t0.elapsed().as_secs_f64() * 1e6 / n as f64;
+            let lat1 = t0.elapsed().as_secs_f64() * 1e6 / f64::from(n);
             let t0 = Instant::now();
             for _ in 0..n { let _ = sw4.infer(&input); }
-            let lat4 = t0.elapsed().as_secs_f64() * 1e6 / n as f64;
+            let lat4 = t0.elapsed().as_secs_f64() * 1e6 / f64::from(n);
             let ratio = lat4 / lat1;
             let passed = ratio < 1.5; // SW: both fast, should be within 50%
             Ok(ValidationResult {
@@ -160,10 +160,10 @@ fn main() -> Result<()> {
             let n = 100;
             let t0 = Instant::now();
             for _ in 0..n { dev.write(&input)?; dev.read(&mut out1)?; }
-            let lat1 = t0.elapsed().as_secs_f64() * 1e6 / n as f64;
+            let lat1 = t0.elapsed().as_secs_f64() * 1e6 / f64::from(n);
             let t0 = Instant::now();
             for _ in 0..n { dev.write(&input)?; dev.read(&mut out4)?; }
-            let lat4 = t0.elapsed().as_secs_f64() * 1e6 / n as f64;
+            let lat4 = t0.elapsed().as_secs_f64() * 1e6 / f64::from(n);
             let ratio = lat4 / lat1;
             let passed = ratio < 1.2; // HW: SkipDMA merges, should be within 20%
             Ok(ValidationResult {
@@ -199,15 +199,12 @@ fn main() -> Result<()> {
                     4,
                     1,
                     0.3,
-                    &vec![0.1f32; 10 * 4],
+                    &[0.1f32; 10 * 4],
                     &vec![0.0f32; 100],
-                    &vec![0.2f32; 10],
+                    &[0.2f32; 10],
                 );
                 dev.write(&blob)?;
-                let input: Vec<u8> = vec![0.5f32; 4]
-                    .iter()
-                    .flat_map(|v| v.to_le_bytes())
-                    .collect();
+                let input: Vec<u8> = [0.5f32; 4].iter().flat_map(|v| v.to_le_bytes()).collect();
                 let mut out = vec![0u8; 4];
                 dev.write(&input)?;
                 dev.read(&mut out)?;
@@ -319,10 +316,7 @@ fn main() -> Result<()> {
                 let mut dev = mgr.open_first()?;
                 // Simulate set_variable() via repeated weight writes
                 // (Full set_variable() requires FlatBuffer mutable slot — validated in bench_weight_mut)
-                let w_data: Vec<u8> = vec![0.1f32; 50]
-                    .iter()
-                    .flat_map(|v| v.to_le_bytes())
-                    .collect();
+                let w_data: Vec<u8> = [0.1f32; 50].iter().flat_map(|v| v.to_le_bytes()).collect();
                 let n = 100usize;
                 let t0 = Instant::now();
                 for _ in 0..n {
@@ -574,7 +568,7 @@ fn main() -> Result<()> {
                 let max_rel = sw_outs
                     .iter()
                     .zip(hw_outs.iter())
-                    .map(|(&s, &h)| ((s - h).abs() / s.abs().max(1e-6)) as f64)
+                    .map(|(&s, &h)| f64::from((s - h).abs() / s.abs().max(1e-6)))
                     .fold(0.0f64, f64::max);
 
                 let passed = max_rel < 0.05;
@@ -610,7 +604,7 @@ struct ValidationSuite {
 }
 
 impl ValidationSuite {
-    fn new(use_sw: bool, verbose: bool) -> Self {
+    const fn new(use_sw: bool, verbose: bool) -> Self {
         Self {
             use_sw,
             verbose,
@@ -687,7 +681,7 @@ fn make_sw_backend(rs: usize, is: usize, os: usize) -> SoftwareBackend {
     // Identity-ish weights: small random w_in, zero w_res, mean readout
     let seed = 42u64;
     let w_in: Vec<f32> = (0..rs * is)
-        .map(|i| (i as f32 * 0.17 + 0.01) % 1.0 - 0.5)
+        .map(|i| (i as f32).mul_add(0.17, 0.01) % 1.0 - 0.5)
         .collect();
     let w_res = vec![0.0f32; rs * rs];
     let w_out: Vec<f32> = (0..os * rs)

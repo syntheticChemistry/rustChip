@@ -31,7 +31,7 @@ impl<'fd> IoHandle<'fd> {
     /// # Errors
     ///
     /// Returns error if read operation fails.
-    pub fn read(&self, buffer: &mut [u8]) -> Result<usize> {
+    pub fn read(self, buffer: &mut [u8]) -> Result<usize> {
         read(self.fd, buffer).map_err(|e| AkidaError::transfer_failed(format!("Read failed: {e}")))
     }
 
@@ -40,7 +40,7 @@ impl<'fd> IoHandle<'fd> {
     /// # Errors
     ///
     /// Returns error if write operation fails.
-    pub fn write(&self, data: &[u8]) -> Result<usize> {
+    pub fn write(self, data: &[u8]) -> Result<usize> {
         write(self.fd, data).map_err(|e| AkidaError::transfer_failed(format!("Write failed: {e}")))
     }
 }

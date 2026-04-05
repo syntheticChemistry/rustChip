@@ -74,8 +74,8 @@ impl DriftMonitor {
         let dim = self.fast_mean.len().min(output.len());
 
         if self.observation_count == 0 {
-            for i in 0..dim {
-                let x = f64::from(output[i]);
+            for (i, out_v) in output.iter().take(dim).enumerate() {
+                let x = f64::from(*out_v);
                 self.fast_mean[i] = x;
                 self.slow_mean[i] = x;
                 self.fast_variance[i] = 0.0;
@@ -85,22 +85,22 @@ impl DriftMonitor {
             return;
         }
 
-        for i in 0..dim {
-            let x = f64::from(output[i]);
+        for (i, out_v) in output.iter().take(dim).enumerate() {
+            let x = f64::from(*out_v);
 
             // Fast EWMA (short memory — tracks recent distribution)
             let alpha_fast = self.config.fast_alpha;
             let diff_fast = x - self.fast_mean[i];
             self.fast_mean[i] += alpha_fast * diff_fast;
-            self.fast_variance[i] =
-                (1.0 - alpha_fast) * (self.fast_variance[i] + alpha_fast * diff_fast * diff_fast);
+            self.fast_variance[i] = (1.0 - alpha_fast)
+                * (alpha_fast * diff_fast).mul_add(diff_fast, self.fast_variance[i]);
 
             // Slow EWMA (long memory — tracks baseline distribution)
             let alpha_slow = self.config.slow_alpha;
             let diff_slow = x - self.slow_mean[i];
             self.slow_mean[i] += alpha_slow * diff_slow;
-            self.slow_variance[i] =
-                (1.0 - alpha_slow) * (self.slow_variance[i] + alpha_slow * diff_slow * diff_slow);
+            self.slow_variance[i] = (1.0 - alpha_slow)
+                * (alpha_slow * diff_slow).mul_add(diff_slow, self.slow_variance[i]);
         }
 
         self.observation_count += 1;
@@ -144,13 +144,13 @@ impl DriftMonitor {
 
     /// Get the last alert without recomputing.
     #[must_use]
-    pub fn last_alert(&self) -> &DriftAlert {
+    pub const fn last_alert(&self) -> &DriftAlert {
         &self.last_alert
     }
 
     /// Number of observations recorded.
     #[must_use]
-    pub fn observation_count(&self) -> u64 {
+    pub const fn observation_count(&self) -> u64 {
         self.observation_count
     }
 
@@ -181,10 +181,10 @@ impl DriftMonitor {
 
             // Simplified symmetric KL divergence for Gaussians
             let kl = 0.5
-                * ((var_fast / var_slow)
-                    + (var_slow / var_fast)
-                    + (mean_diff * mean_diff) * (1.0 / var_fast + 1.0 / var_slow)
-                    - 2.0);
+                * ((mean_diff * mean_diff).mul_add(
+                    1.0 / var_fast + 1.0 / var_slow,
+                    (var_fast / var_slow) + (var_slow / var_fast),
+                ) - 2.0);
 
             total_divergence += kl;
         }
@@ -230,13 +230,13 @@ pub enum DriftAlert {
 impl DriftAlert {
     /// Whether this alert requires action.
     #[must_use]
-    pub fn needs_action(&self) -> bool {
+    pub const fn needs_action(&self) -> bool {
         matches!(self, Self::MajorDrift { .. } | Self::DomainShift { .. })
     }
 
     /// Whether this is a domain shift (highest severity).
     #[must_use]
-    pub fn is_domain_shift(&self) -> bool {
+    pub const fn is_domain_shift(&self) -> bool {
         matches!(self, Self::DomainShift { .. })
     }
 }
@@ -290,7 +290,7 @@ pub enum AdaptiveRecovery {
 impl AdaptiveRecovery {
     /// Select a recovery strategy based on the drift alert level.
     #[must_use]
-    pub fn for_alert(alert: &DriftAlert) -> Self {
+    pub const fn for_alert(alert: &DriftAlert) -> Self {
         match alert {
             DriftAlert::NoDrift | DriftAlert::MinorDrift { .. } => Self::Notify,
             DriftAlert::MajorDrift { .. } => Self::ReEvolve { generations: 50 },
@@ -366,5 +366,44 @@ mod tests {
             }),
             AdaptiveRecovery::ReloadModel
         );
+    }
+
+    #[test]
+    fn domain_shift_alert_flag() {
+        let alert = DriftAlert::DomainShift {
+            divergence: 99.0,
+            observations: 10,
+        };
+        assert!(alert.is_domain_shift());
+        assert!(alert.needs_action());
+    }
+
+    #[test]
+    fn minor_drift_does_not_need_action() {
+        let alert = DriftAlert::MinorDrift {
+            divergence: 2.0,
+            observations: 200,
+        };
+        assert!(!alert.needs_action());
+    }
+
+    #[test]
+    fn major_drift_recovery_re_evolve() {
+        let alert = DriftAlert::MajorDrift {
+            divergence: 10.0,
+            observations: 500,
+        };
+        assert!(alert.needs_action());
+        assert_eq!(
+            AdaptiveRecovery::for_alert(&alert),
+            AdaptiveRecovery::ReEvolve { generations: 50 }
+        );
+    }
+
+    #[test]
+    fn first_observe_initializes_trackers() {
+        let mut monitor = DriftMonitor::new(2, DriftConfig::default());
+        monitor.observe(&[], &[3.0, 4.0]);
+        assert_eq!(monitor.observation_count(), 1);
     }
 }

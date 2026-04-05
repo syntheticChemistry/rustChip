@@ -43,8 +43,8 @@ pub trait NpuBackend: Debug + Send + Sync {
 
     /// Load reservoir weights for echo state networks
     ///
-    /// w_in: input -> reservoir weights
-    /// w_res: reservoir -> reservoir (recurrent) weights
+    /// `w_in`: input -> reservoir weights
+    /// `w_res`: reservoir -> reservoir (recurrent) weights
     ///
     /// # Errors
     ///
@@ -81,6 +81,11 @@ pub trait NpuBackend: Debug + Send + Sync {
     /// Returns the number of bytes verified and whether they matched.
     ///
     /// Default: no-op (not all backends support SRAM readback).
+    ///
+    /// # Errors
+    ///
+    /// Concrete backends return errors only when SRAM readback fails; this default
+    /// implementation always succeeds.
     fn verify_load(&mut self, _expected: &[u8]) -> Result<LoadVerification> {
         Ok(LoadVerification::unsupported())
     }
@@ -186,7 +191,7 @@ pub enum BackendType {
     /// Kernel driver (/dev/akida*)
     Kernel,
 
-    /// Userspace driver (mmap PCIe BARs)
+    /// Userspace driver (mmap `PCIe` BARs)
     Userspace,
 
     /// VFIO driver (pure Rust with DMA)
@@ -273,5 +278,50 @@ pub fn select_backend(selection: BackendSelection, device_id: &str) -> Result<Bo
         BackendSelection::Software => {
             SoftwareBackend::init(device_id).map(|b| Box::new(b) as Box<dyn NpuBackend>)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_handle_roundtrip() {
+        let h = ModelHandle::new(42);
+        assert_eq!(h.id(), 42);
+    }
+
+    #[test]
+    fn load_verification_constructors() {
+        let u = LoadVerification::unsupported();
+        assert!(!u.supported);
+        let ok = LoadVerification::ok(100);
+        assert!(ok.verified && ok.bytes_matched == 100);
+        let bad = LoadVerification::mismatch(10, 3);
+        assert!(!bad.verified && bad.bytes_matched == 3);
+    }
+
+    #[test]
+    fn backend_type_display_and_selection_software() {
+        assert!(BackendType::Software.to_string().contains("Software"));
+        let b = select_backend(BackendSelection::Software, "0").expect("software backend");
+        assert_eq!(b.backend_type(), BackendType::Software);
+    }
+
+    #[test]
+    fn backend_type_display_covers_all_variants() {
+        assert_eq!(BackendType::Kernel.to_string(), "Kernel");
+        assert_eq!(BackendType::Userspace.to_string(), "Userspace");
+        assert_eq!(BackendType::Vfio.to_string(), "VFIO");
+    }
+
+    #[test]
+    fn software_backend_default_trait_methods() {
+        let mut b = select_backend(BackendSelection::Software, "0").expect("software");
+        let v = b.verify_load(&[1, 2, 3]).expect("default verify_load");
+        assert!(!v.supported);
+        assert!(b.mutate_weights(0, &[1]).is_err());
+        assert!(b.read_sram(0, 4).is_err());
+        let _ = v;
     }
 }

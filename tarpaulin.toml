@@ -1,0 +1,17 @@
+# Hardware-only modules are excluded from coverage measurement.
+# These files require physical AKD1000/AKD1500 hardware, VFIO kernel
+# modules, and mapped BAR regions that are not available in CI.
+# Software-testable coverage target: 60% (gate), 90% (target).
+
+[tarpaulin]
+fail-under = 60.0
+all-features = true
+exclude-files = [
+    "crates/akida-driver/src/vfio/*",
+    "crates/akida-driver/src/mmio.rs",
+    "crates/akida-driver/src/backends/mmap.rs",
+    "crates/akida-driver/src/backends/kernel.rs",
+    "crates/akida-driver/src/backends/userspace.rs",
+    "crates/akida-driver/src/io.rs",
+    "crates/akida-driver/src/device.rs",
+]

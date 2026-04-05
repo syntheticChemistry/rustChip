@@ -327,4 +327,17 @@ mod tests {
         assert_eq!(regs::INFER_START, 0x0400);
         assert!(regs::status::READY != 0);
     }
+
+    #[test]
+    fn bar_indices_match_pci_resource_convention() {
+        assert_eq!(Bar::Control as u8, 0);
+        assert_eq!(Bar::Model as u8, 1);
+        assert_eq!(Bar::Data as u8, 2);
+    }
+
+    #[test]
+    fn vfio_region_info_default_is_zeroed() {
+        let r = VfioRegionInfo::default();
+        assert_eq!(r.argsz, 0);
+    }
 }

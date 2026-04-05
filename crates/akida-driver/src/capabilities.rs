@@ -25,7 +25,7 @@ pub struct Capabilities {
     /// On-chip SRAM in megabytes
     pub memory_mb: u32,
 
-    /// PCIe configuration
+    /// `PCIe` configuration
     pub pcie: PcieConfig,
 
     /// Current power consumption in milliwatts
@@ -154,7 +154,6 @@ impl ClockMode {
     /// Parse clock mode from sysfs string
     pub fn from_sysfs_str(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
-            "performance" | "perf" => Self::Performance,
             "economy" | "eco" => Self::Economy,
             "low_power" | "lowpower" | "lp" => Self::LowPower,
             _ => Self::Performance,
@@ -181,20 +180,25 @@ impl ClockMode {
 }
 
 /// Batch inference capabilities discovered from hardware probing.
-/// metalForge discovered that AKD1000 batch performance scales with
-/// PCIe round-trip amortization, peaking at batch=8.
+///
+/// On AKD1000, host submission overhead and `PCIe` latency dominate small batches;
+/// metalForge measured throughput improving with batch size until SRAM or timing
+/// limits bind, with a sweet spot often near batch=8 for this link class.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BatchCapabilities {
-    /// Maximum batch size that fits in SRAM
+    /// Upper bound from on-chip SRAM budget for activations + weights in flight.
     pub max_batch: u32,
-    /// Optimal batch size for throughput (measured, not assumed)
+    /// Batch size that maximized sustained inferences/sec in metalForge runs.
     pub optimal_batch: u32,
-    /// Speedup at optimal batch vs batch=1 (measured)
+    /// Throughput ratio vs batch=1 at `optimal_batch` (host + device, end-to-end).
     pub optimal_speedup: f32,
 }
 
 impl BatchCapabilities {
-    /// Discover batch capabilities from sysfs.
+    /// Discover batch capabilities from optional sysfs nodes (`akida_max_batch`, etc.).
+    ///
+    /// Returns `None` if the driver does not expose these attributes (VFIO-only or
+    /// minimal kernels); callers may fall back to conservative defaults.
     pub fn from_sysfs(pcie_address: &str) -> Option<Self> {
         let base = format!("/sys/bus/pci/devices/{pcie_address}");
 
@@ -227,7 +231,7 @@ impl BatchCapabilities {
 pub enum WeightMutationSupport {
     /// Not available on this hardware
     None,
-    /// Full runtime weight updates via set_variable
+    /// Full runtime weight updates via `set_variable`
     Full,
     /// Readout layer only (faster, no reservoir re-upload)
     ReadoutOnly,
@@ -271,8 +275,7 @@ impl ChipVersion {
     /// Get typical NPU count for this chip version
     pub const fn typical_npu_count(&self) -> u32 {
         match self {
-            Self::Akd1000 => 80,
-            Self::Akd1500 => 80, // Same as AKD1000
+            Self::Akd1000 | Self::Akd1500 => 80, // Same as AKD1000
             Self::Unknown(_) => 0,
         }
     }
@@ -280,20 +283,19 @@ impl ChipVersion {
     /// Get typical SRAM size in MB
     pub const fn typical_memory_mb(&self) -> u32 {
         match self {
-            Self::Akd1000 => 10,
-            Self::Akd1500 => 10, // Base SRAM, plus external DDR
+            Self::Akd1000 | Self::Akd1500 => 10, // Base SRAM, plus external DDR
             Self::Unknown(_) => 0,
         }
     }
 }
 
-/// PCIe configuration
+/// `PCIe` configuration
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PcieConfig {
-    /// PCIe generation (1, 2, 3, 4, 5)
+    /// `PCIe` generation (1, 2, 3, 4, 5)
     pub generation: u8,
 
-    /// Number of PCIe lanes (1, 4, 8, 16)
+    /// Number of `PCIe` lanes (1, 4, 8, 16)
     pub lanes: u8,
 
     /// Link speed in GT/s
@@ -304,7 +306,7 @@ pub struct PcieConfig {
 }
 
 impl PcieConfig {
-    /// Create PCIe config from generation and lanes
+    /// Create `PCIe` config from generation and lanes
     pub fn new(generation: u8, lanes: u8) -> Self {
         let speed_gts = Self::generation_to_speed(generation);
         let bandwidth_gbps = Self::calculate_bandwidth(generation, lanes);
@@ -317,11 +319,11 @@ impl PcieConfig {
         }
     }
 
-    /// Query PCIe config from sysfs
+    /// Query `PCIe` config from sysfs
     ///
     /// # Errors
     ///
-    /// Returns error if PCIe configuration cannot be read from sysfs.
+    /// Returns error if `PCIe` configuration cannot be read from sysfs.
     pub fn from_sysfs(pcie_address: &str) -> Result<Self> {
         let base_path = format!("/sys/bus/pci/devices/{pcie_address}");
 
@@ -333,12 +335,11 @@ impl PcieConfig {
 
     const fn generation_to_speed(generation: u8) -> f32 {
         match generation {
-            1 => 2.5,
             2 => 5.0,
             3 => 8.0,
             4 => 16.0,
             5 => 32.0,
-            _ => 2.5, // Default to Gen1
+            _ => 2.5, // Gen1 and unknown generations
         }
     }
 
@@ -348,14 +349,13 @@ impl PcieConfig {
             2 => 0.5,  // 500 MB/s
             3 => 1.0,  // ~1 GB/s
             4 => 2.0,  // ~2 GB/s
-            5 => 4.0,  // 4 GB/s for Gen5
-            _ => 4.0,  // default for unknown generations
+            _ => 4.0,  // Gen5 and unknown: use highest per-lane rate in this table
         };
 
         per_lane_gbps * f32::from(lanes)
     }
 
-    /// Read PCIe generation from sysfs
+    /// Read `PCIe` generation from sysfs
     ///
     /// # Errors
     ///
@@ -384,7 +384,7 @@ impl PcieConfig {
             .ok_or_else(|| AkidaError::capability_query_failed("Could not read PCIe generation"))
     }
 
-    /// Read PCIe lane count from sysfs
+    /// Read `PCIe` lane count from sysfs
     ///
     /// # Errors
     ///
@@ -449,11 +449,11 @@ impl Capabilities {
         // Try to read from device-specific sysfs attribute
         let npu_count_path = format!("/sys/bus/pci/devices/{pcie_address}/akida_npu_count");
 
-        if let Ok(count_str) = std::fs::read_to_string(&npu_count_path) {
-            if let Ok(count) = count_str.trim().parse::<u32>() {
-                tracing::debug!("Queried NPU count from device: {count}");
-                return count;
-            }
+        if let Ok(count_str) = std::fs::read_to_string(&npu_count_path)
+            && let Ok(count) = count_str.trim().parse::<u32>()
+        {
+            tracing::debug!("Queried NPU count from device: {count}");
+            return count;
         }
 
         // Fallback to typical values for chip version
@@ -485,12 +485,12 @@ impl Capabilities {
             );
 
             // power1_input is in microwatts, convert to milliwatts
-            if let Ok(power_str) = std::fs::read_to_string(&power_input_path) {
-                if let Ok(power_uw) = power_str.trim().parse::<u32>() {
-                    let power_mw = power_uw / 1000;
-                    tracing::info!("Queried power consumption: {} mW", power_mw);
-                    return Some(power_mw);
-                }
+            if let Ok(power_str) = std::fs::read_to_string(&power_input_path)
+                && let Ok(power_uw) = power_str.trim().parse::<u32>()
+            {
+                let power_mw = power_uw / 1000;
+                tracing::info!("Queried power consumption: {} mW", power_mw);
+                return Some(power_mw);
             }
         }
 
@@ -521,17 +521,17 @@ impl Capabilities {
             );
 
             // temp1_input is in millidegrees Celsius, convert to degrees
-            if let Ok(temp_str) = std::fs::read_to_string(&temp_input_path) {
-                if let Ok(temp_millic) = temp_str.trim().parse::<i32>() {
-                    // Precision loss acceptable: temperature is inherently imprecise
-                    #[expect(
-                        clippy::cast_precision_loss,
-                        reason = "Millidegrees to f32 °C for display"
-                    )]
-                    let temp_c = temp_millic as f32 / 1000.0;
-                    tracing::info!("Queried temperature: {:.1}°C", temp_c);
-                    return Some(temp_c);
-                }
+            if let Ok(temp_str) = std::fs::read_to_string(&temp_input_path)
+                && let Ok(temp_millic) = temp_str.trim().parse::<i32>()
+            {
+                // Precision loss acceptable: temperature is inherently imprecise
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "Millidegrees to f32 °C for display"
+                )]
+                let temp_c = temp_millic as f32 / 1000.0;
+                tracing::info!("Queried temperature: {:.1}°C", temp_c);
+                return Some(temp_c);
             }
         }
 
@@ -578,7 +578,7 @@ impl Capabilities {
     ///
     /// This is the ground-truth path — reads actual hardware state instead
     /// of relying on sysfs attributes that may be absent or stale.
-    /// Falls back to sysfs for values that only exist there (PCIe config,
+    /// Falls back to sysfs for values that only exist there (`PCIe` config,
     /// hwmon power/temp, clock mode).
     ///
     /// # Errors
@@ -594,12 +594,12 @@ impl Capabilities {
         // Ground truth: device identity from hardware
         let device_id_reg = sram.read_device_id()?;
         let chip_version = match device_id_reg {
-            0x194000a1 | 0x1E7C_BCA1 => ChipVersion::Akd1000,
+            0x1940_00a1 | 0x1E7C_BCA1 => ChipVersion::Akd1000,
             v if v & 0xFFFF == 0xBCA2 => ChipVersion::Akd1500,
             _ => {
                 tracing::warn!("Unknown device ID {device_id_reg:#010x}, trying sysfs");
                 Self::read_chip_version(pcie_address)
-                    .unwrap_or(ChipVersion::from_register(device_id_reg))
+                    .unwrap_or_else(|_| ChipVersion::from_register(device_id_reg))
             }
         };
 
@@ -613,14 +613,11 @@ impl Capabilities {
         };
 
         // Ground truth: SRAM configuration from registers
-        let memory_mb = match sram.read_sram_config() {
-            Ok(cfg) => {
+        let memory_mb = sram.read_sram_config().map_or_else(
+            |_| chip_version.typical_memory_mb(),
+            |cfg| {
                 let sram_size_hint = u64::from(cfg.region_0) * u64::from(cfg.region_1);
                 if sram_size_hint > 0 {
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "SRAM size estimate fits MB counter"
-                    )]
                     let mb = (sram_size_hint / (1024 * 1024)).max(1) as u32;
                     tracing::info!(
                         "SRAM from BAR0: region_0={:#x}, region_1={:#x} → {mb} MB estimate",
@@ -631,9 +628,8 @@ impl Capabilities {
                 } else {
                     chip_version.typical_memory_mb()
                 }
-            }
-            Err(_) => chip_version.typical_memory_mb(),
-        };
+            },
+        );
 
         // Ground truth: mesh topology from NP enable bits
         let mesh =
@@ -690,10 +686,10 @@ impl Capabilities {
 
         // AKD1000 supports full weight mutation (metalForge validated)
         let device_path = format!("/sys/bus/pci/devices/{pcie_address}/device");
-        if let Ok(id_str) = std::fs::read_to_string(&device_path) {
-            if id_str.trim().contains("BCA1") || id_str.trim().contains("bca1") {
-                return WeightMutationSupport::Full;
-            }
+        if let Ok(id_str) = std::fs::read_to_string(&device_path)
+            && (id_str.trim().contains("BCA1") || id_str.trim().contains("bca1"))
+        {
+            return WeightMutationSupport::Full;
         }
 
         WeightMutationSupport::None
@@ -804,5 +800,121 @@ mod tests {
             WeightMutationSupport::Full,
             WeightMutationSupport::ReadoutOnly
         );
+    }
+
+    #[test]
+    fn chip_version_from_register_known_bits() {
+        assert_eq!(ChipVersion::from_register(0x10), ChipVersion::Akd1000);
+        assert_eq!(ChipVersion::from_register(0x15), ChipVersion::Akd1500);
+        assert_eq!(ChipVersion::from_register(0x99), ChipVersion::Unknown(0));
+    }
+
+    #[test]
+    fn chip_version_typical_resources() {
+        assert_eq!(ChipVersion::Akd1000.typical_npu_count(), 80);
+        assert_eq!(ChipVersion::Akd1000.typical_memory_mb(), 10);
+        assert_eq!(ChipVersion::Unknown(0x1234).typical_npu_count(), 0);
+        assert_eq!(ChipVersion::Unknown(0x1234).typical_memory_mb(), 0);
+    }
+
+    #[test]
+    fn pcie_config_speed_and_bandwidth_monotone() {
+        let g2 = PcieConfig::new(2, 1);
+        let g3 = PcieConfig::new(3, 1);
+        assert!(g3.speed_gts > g2.speed_gts);
+        let x1 = PcieConfig::new(3, 1);
+        let x4 = PcieConfig::new(3, 4);
+        assert!(x4.bandwidth_gbps > x1.bandwidth_gbps);
+    }
+
+    #[test]
+    fn substrate_mode_descriptions_non_empty() {
+        use crate::SubstrateMode;
+        assert!(!SubstrateMode::PureSoftware.description().is_empty());
+        assert!(!SubstrateMode::HardwareLinear.description().is_empty());
+        assert!(!SubstrateMode::HardwareNative.description().is_empty());
+    }
+
+    #[test]
+    fn pcie_config_covers_gen1_and_high_gen_bandwidth_table() {
+        let g1 = PcieConfig::new(1, 4);
+        assert!((g1.speed_gts - 2.5).abs() < 0.01);
+        let g5 = PcieConfig::new(5, 8);
+        assert!(g5.speed_gts >= 32.0);
+        assert!(g5.bandwidth_gbps > g1.bandwidth_gbps);
+    }
+
+    #[test]
+    fn batch_capabilities_struct_fields_roundtrip() {
+        let b = BatchCapabilities {
+            max_batch: 16,
+            optimal_batch: 8,
+            optimal_speedup: 2.5,
+        };
+        assert_eq!(b.max_batch, 16);
+        assert!((b.optimal_speedup - 2.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clock_mode_from_sysfs_str_lowpower_aliases() {
+        assert_eq!(ClockMode::from_sysfs_str("lp"), ClockMode::LowPower);
+        assert_eq!(ClockMode::from_sysfs_str("lowpower"), ClockMode::LowPower);
+    }
+
+    #[test]
+    fn chip_version_from_register_uses_low_byte_only() {
+        assert_eq!(ChipVersion::from_register(0x110), ChipVersion::Akd1000);
+        assert_eq!(ChipVersion::from_register(0x215), ChipVersion::Akd1500);
+    }
+
+    #[test]
+    fn pcie_config_gen5_and_unknown_generation_bandwidth_table() {
+        let g5 = PcieConfig::new(5, 2);
+        assert!((g5.speed_gts - 32.0).abs() < 0.01);
+        assert!((g5.bandwidth_gbps - 8.0).abs() < 0.01);
+
+        let g9 = PcieConfig::new(9, 1);
+        assert!((g9.speed_gts - 2.5).abs() < 0.01);
+        assert!((g9.bandwidth_gbps - 4.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn mesh_topology_total_slots_single_np_line() {
+        let m = MeshTopology {
+            x: 100,
+            y: 1,
+            z: 1,
+            functional_count: 100,
+        };
+        assert_eq!(m.total_slots(), 100);
+    }
+
+    #[test]
+    fn capabilities_struct_clone_and_debug() {
+        let c = Capabilities {
+            chip_version: ChipVersion::Akd1000,
+            npu_count: 80,
+            memory_mb: 10,
+            pcie: PcieConfig::new(3, 8),
+            power_mw: Some(5000),
+            temperature_c: Some(55.5),
+            mesh: Some(MeshTopology {
+                x: 5,
+                y: 8,
+                z: 2,
+                functional_count: 80,
+            }),
+            clock_mode: Some(ClockMode::Economy),
+            batch: Some(BatchCapabilities {
+                max_batch: 32,
+                optimal_batch: 8,
+                optimal_speedup: 2.0,
+            }),
+            weight_mutation: WeightMutationSupport::Full,
+        };
+        let c2 = c.clone();
+        assert_eq!(c, c2);
+        let s = format!("{c:?}");
+        assert!(s.contains("Akd1000"));
     }
 }

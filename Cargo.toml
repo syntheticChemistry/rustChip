@@ -20,11 +20,49 @@ homepage     = "https://github.com/ecoPrimal/rustChip"
 unsafe_code = "forbid"
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
+# Benchmark binaries keep optional metrics and scaffolding that are not always exercised.
+dead_code = "allow"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
+
+# Neuromorphic / ML / driver code intentionally converts between u8/u16/u32/u64/usize and
+# float types for quantization, timing, and hardware registers. Clippy's cast lints are
+# noisy here without adding safety; we rely on tests and domain review instead.
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+cast_possible_wrap = "allow"
+
+# Benchmark / experiment binaries often exceed pedantic size limits; the hot paths are tables and
+# one-off harnesses, not production APIs.
+too_many_lines = "allow"
+type_complexity = "allow"
+struct_field_names = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+needless_pass_by_ref_mut = "allow"
+trivially_copy_pass_by_ref = "allow"
+too_many_arguments = "allow"
+# Benchmark harnesses use long numeric literals and index-based loops over fixed tensors; fixing
+# every occurrence across bin targets adds churn without improving safety.
+unreadable_literal = "allow"
+needless_range_loop = "allow"
+# Nursery / style lints that dominate benchmark-only code (map_or_else churn, `let`-else style, etc.).
+option_if_let_else = "allow"
+manual_let_else = "allow"
+assigning_clones = "allow"
+no_effect_underscore_binding = "allow"
+or_fun_call = "allow"
+unnecessary_wraps = "allow"
+needless_for_each = "allow"
+match_wildcard_for_single_variants = "allow"
+if_same_then_else = "allow"
+collection_is_never_read = "allow"
+branches_sharing_code = "allow"
 
 # ── shared dependencies ──────────────────────────────────────────────────────
 [workspace.dependencies]

@@ -109,13 +109,13 @@ impl NpuSetup {
             }
         }
 
-        return Err(AkidaError::hardware_error(
+        Err(AkidaError::hardware_error(
             "Akida kernel module not found. Set AKIDA_DRIVER_PATH environment variable \
             or install the driver to /lib/modules/$(uname -r)/extra/akida-pcie.ko",
-        ));
+        ))
     }
 
-    /// Enable PCIe devices
+    /// Enable `PCIe` devices
     fn enable_pcie_devices(&self) -> Result<()> {
         info!("Enabling PCIe devices...");
 
@@ -135,7 +135,7 @@ impl NpuSetup {
         Ok(())
     }
 
-    /// Enable single PCIe device
+    /// Enable single `PCIe` device
     fn enable_device(&self, address: &str) -> Result<()> {
         let enable_path = format!("/sys/bus/pci/devices/{address}/enable");
 
@@ -185,11 +185,11 @@ impl NpuSetup {
             .ok_or_else(|| AkidaError::hardware_error("Driver path not set"))?;
 
         // Try direct insmod first
-        if let Ok(status) = Command::new("insmod").arg(driver_path).status() {
-            if status.success() {
-                info!("Module loaded (direct)");
-                return Ok(());
-            }
+        if let Ok(status) = Command::new("insmod").arg(driver_path).status()
+            && status.success()
+        {
+            info!("Module loaded (direct)");
+            return Ok(());
         }
 
         // Need privilege escalation
@@ -334,5 +334,34 @@ mod tests {
         let version = kernel_version().unwrap();
         assert!(!version.is_empty());
         println!("Kernel version: {version}");
+    }
+
+    #[test]
+    fn npu_setup_new_and_default_construct() {
+        let a = NpuSetup::new();
+        let b = NpuSetup::default();
+        // Both start with no driver path; pkexec presence is environment-specific.
+        assert!(a.driver_path.is_none());
+        assert!(b.driver_path.is_none());
+    }
+
+    #[test]
+    fn find_in_path_finds_common_system_binary() {
+        // Exercise PATH search used for pkexec detection (no production change).
+        let sh = find_in_path("sh");
+        assert!(sh.is_some(), "expected `sh` on PATH in test environment");
+        assert!(sh.unwrap().is_file());
+    }
+
+    #[test]
+    fn find_in_path_returns_none_for_impossible_name() {
+        assert!(find_in_path("akida_nonexistent_binary_xyz_42").is_none());
+    }
+
+    #[test]
+    fn is_module_loaded_runs_lsmod() {
+        let loaded = is_module_loaded().expect("lsmod should run");
+        // akida_pcie may or may not be present; call must succeed.
+        let _ = loaded;
     }
 }

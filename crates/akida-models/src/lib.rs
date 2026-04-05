@@ -34,8 +34,6 @@
 //! ```
 
 #![warn(missing_docs)]
-#![warn(clippy::all)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
 
@@ -58,4 +56,19 @@ pub use zoo::{ModelTask, ModelZoo, ZooModel};
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::{Layer, LayerType, Model, ModelZoo, Result, ZooModel};
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    #[test]
+    fn prelude_exports_resolve() {
+        let _: Result<()> = Ok(());
+        let _ = core::mem::size_of::<Model>();
+        let _ = core::mem::size_of::<Layer>();
+        let _ = core::mem::size_of::<LayerType>();
+        let _ = core::mem::size_of::<ModelZoo>();
+        let _ = core::mem::size_of::<ZooModel>();
+    }
 }
