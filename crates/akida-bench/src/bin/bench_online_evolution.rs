@@ -195,7 +195,7 @@ impl EvolvableClassifier {
         let correct = inputs
             .iter()
             .zip(labels.iter())
-            .filter(|(x, &l)| self.infer(x) == l)
+            .filter(|&(x, l)| self.infer(x) == *l)
             .count();
         correct as f32 / inputs.len() as f32
     }
@@ -273,7 +273,7 @@ fn run_evolution(
     // This is ~1.6% overhead — negligible. We model it in the summary.
     let set_variable_overhead_per_gen = Duration::from_micros(86);
 
-    for gen in 0..max_generations {
+    for generation in 0..max_generations {
         // Generate population
         let candidates: Vec<Vec<f32>> = (0..pop_size).map(|_| classifier.perturb(sigma)).collect();
 
@@ -281,11 +281,11 @@ fn run_evolution(
         let scores: Vec<f32> = candidates
             .iter()
             .map(|c| {
-                let mut temp = EvolvableClassifier {
+                let temp = EvolvableClassifier {
                     input_dim: classifier.input_dim,
                     output_dim: classifier.output_dim,
                     weights: c.clone(),
-                    rng: Xoshiro::new(gen as u64),
+                    rng: Xoshiro::new(generation as u64),
                 };
                 temp.accuracy(&eval_inputs, &eval_labels)
             })
@@ -309,14 +309,14 @@ fn run_evolution(
 
         // Track convergence
         if best_accuracy >= target_accuracy && convergence_gen.is_none() {
-            convergence_gen = Some(gen + 1);
+            convergence_gen = Some(generation + 1);
             convergence_sec = Some(start.elapsed().as_secs_f64());
         }
 
-        if gen % 100 == 0 {
+        if generation % 100 == 0 {
             accuracy_history.push(best_accuracy);
-            if verbose && gen % 200 == 0 {
-                println!("    Gen {:>4}: {:.1}%", gen, best_accuracy * 100.0);
+            if verbose && generation % 200 == 0 {
+                println!("    Gen {:>4}: {:.1}%", generation, best_accuracy * 100.0);
             }
         }
 
@@ -476,7 +476,7 @@ fn task_ensemble_construction(verbose: bool) -> Result<EvolutionResult> {
         let ensemble_pred = counts
             .iter()
             .enumerate()
-            .max_by_key(|(_, &c)| c)
+            .max_by_key(|(_, c)| *c)
             .map(|(i, _)| i)
             .unwrap_or(0);
         if ensemble_pred == label {

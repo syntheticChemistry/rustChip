@@ -42,3 +42,6 @@ path = "examples/program_external.rs"
 
 [lib]
 crate-type = ["rlib"]
+
+[lints]
+workspace = true

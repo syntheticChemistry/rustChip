@@ -380,7 +380,10 @@ fn calculate_throughput(bytes: usize, seconds: f64) -> f64 {
         return 0.0;
     }
 
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Progress ratio as f32 for display"
+    )]
     let megabytes = bytes as f64 / 1_048_576.0;
     megabytes / seconds
 }

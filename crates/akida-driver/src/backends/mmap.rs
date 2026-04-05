@@ -15,7 +15,7 @@
 //! identical functionality.
 
 use crate::error::{AkidaError, Result};
-use rustix::mm::{mmap, munmap, MapFlags, ProtFlags};
+use rustix::mm::{MapFlags, ProtFlags, mmap, munmap};
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::AsFd;
 use std::ptr::NonNull;
@@ -70,7 +70,10 @@ impl MmapRegion {
             })?;
 
         // Truncation acceptable: BAR sizes fit in usize on 64-bit (our only target)
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "Mapped length fits usize on host"
+        )]
         let size = file
             .metadata()
             .map_err(|e| AkidaError::capability_query_failed(format!("Cannot stat BAR: {e}")))?
@@ -146,7 +149,10 @@ impl MmapRegion {
         // - Cast to *const u32: PCIe BAR registers are 4-byte aligned per spec
         // - read_volatile is required: MMIO registers have side effects and compiler
         //   must not reorder or optimize these reads (hardware may change value)
-        #[allow(clippy::cast_ptr_alignment)]
+        #[expect(
+            clippy::cast_ptr_alignment,
+            reason = "MMIO base is device-aligned per BAR"
+        )]
         let value = unsafe {
             let ptr = self.ptr.as_ptr().add(offset).cast::<u32>();
             ptr.read_volatile()
@@ -180,7 +186,10 @@ impl MmapRegion {
         // - Cast to *mut u32: PCIe BAR registers are 4-byte aligned per spec
         // - write_volatile is required: MMIO writes have side effects (trigger hardware
         //   operations) and compiler must not reorder or optimize these writes
-        #[allow(clippy::cast_ptr_alignment)]
+        #[expect(
+            clippy::cast_ptr_alignment,
+            reason = "MMIO base is device-aligned per BAR"
+        )]
         unsafe {
             let ptr = self.ptr.as_ptr().add(offset).cast::<u32>();
             ptr.write_volatile(value);

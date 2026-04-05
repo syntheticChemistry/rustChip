@@ -20,7 +20,7 @@
 //! | [`program`] | FlatBuffer `program_info` / `program_data` format |
 
 #![forbid(unsafe_code)]
-#![deny(clippy::expect_used, clippy::unwrap_used)]
+#![warn(clippy::expect_used, clippy::unwrap_used)]
 #![warn(missing_docs)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]

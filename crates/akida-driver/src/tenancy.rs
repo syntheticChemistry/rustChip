@@ -161,9 +161,15 @@ impl MultiTenantDevice {
 
         // Read first page of each slot's NP range
         let sample_size = 4096usize;
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "NP index fits hardware address field"
+        )]
         let a_data = sram.read_bar1(a_base as usize, sample_size)?;
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "NP index fits hardware address field"
+        )]
         let b_data = sram.read_bar1(b_base as usize, sample_size)?;
 
         let cross_match = a_data == b_data;

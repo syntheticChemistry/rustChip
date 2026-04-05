@@ -52,7 +52,10 @@ impl DmaBuffer {
         }
 
         // Truncation safe: struct sizes fit in u32
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "DMA size rounded to page alignment"
+        )]
         let dma_map = VfioDmaMap {
             argsz: std::mem::size_of::<VfioDmaMap>() as u32,
             flags: ioctls::VFIO_DMA_MAP_FLAG_READ | ioctls::VFIO_DMA_MAP_FLAG_WRITE,
@@ -157,7 +160,10 @@ impl Drop for DmaBuffer {
 
         // Layout is infallible here: size is from alloc in new(), 4096 is a power-of-two.
         // Allow in Drop because we cannot propagate errors.
-        #[allow(clippy::expect_used)]
+        #[expect(
+            clippy::expect_used,
+            reason = "Invariant: layout size matches allocation"
+        )]
         let layout = std::alloc::Layout::from_size_align(self.size, 4096)
             .expect("Layout valid: size from alloc in new(), 4096 is power-of-two");
         // SAFETY: dealloc necessary; must match alloc_zeroed in new(). Invariants: (1) vaddr

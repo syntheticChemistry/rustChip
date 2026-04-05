@@ -55,3 +55,13 @@ path = "tests/backend_parity.rs"
 
 [lib]
 crate-type = ["rlib"]
+
+# Cannot use `workspace = true` here: workspace forbids unsafe; this crate needs VFIO/mmap/DMA unsafe.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }

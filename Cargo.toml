@@ -10,11 +10,20 @@ members = [
 
 [workspace.package]
 version      = "0.1.0"
-edition      = "2021"
+edition      = "2024"
 license      = "AGPL-3.0-or-later"
 repository   = "https://github.com/ecoPrimal/rustChip"
 authors      = ["ecoPrimal <ecoPrimal@pm.me>"]
 homepage     = "https://github.com/ecoPrimal/rustChip"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
 
 # ── shared dependencies ──────────────────────────────────────────────────────
 [workspace.dependencies]

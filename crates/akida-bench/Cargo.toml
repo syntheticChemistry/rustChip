@@ -95,3 +95,6 @@ path = "src/bin/run_experiments.rs"
 [[bin]]
 name = "probe_sram"              # SRAM probe: direct memory read/write for all NP SRAM
 path = "src/bin/probe_sram.rs"
+
+[lints]
+workspace = true

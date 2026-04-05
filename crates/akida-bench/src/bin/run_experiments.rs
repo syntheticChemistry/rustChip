@@ -307,15 +307,15 @@ fn run_exp004(rng: &mut Xoshiro, hw: bool) -> (bool, Vec<(&'static str, bool, &'
     let sw_state: Vec<f32> = vec![0.0f32; rs]; // unused — kept for symmetry
     let mut hw_state = vec![0.0f32; rs];
     let max_relative_err = 0.0f64; // documented: Approach B diverges for negative activations
-                                   // Approach B key test: does it prevent the degenerate reservoir collapse?
-                                   // Native bounded ReLU with random weights → states collapse to 0 (near-chance).
-                                   // Approach B recovers non-zero states via tanh on the positive half.
-                                   //
-                                   // Limitation: negative pre-activations are CLIPPED to 0 before tanh recovery.
-                                   //   Approach B: tanh(max(0, pre) / ε) = 0 for pre < 0   (loses sign info)
-                                   //   True tanh:  tanh(pre)              ∈ (-1, 0) for pre < 0
-                                   // Approach A (FlatBuffer threshold override) fixes this fully — negative values
-                                   // pass through the hardware without clipping. That is the true tanh parity path.
+    // Approach B key test: does it prevent the degenerate reservoir collapse?
+    // Native bounded ReLU with random weights → states collapse to 0 (near-chance).
+    // Approach B recovers non-zero states via tanh on the positive half.
+    //
+    // Limitation: negative pre-activations are CLIPPED to 0 before tanh recovery.
+    //   Approach B: tanh(max(0, pre) / ε) = 0 for pre < 0   (loses sign info)
+    //   True tanh:  tanh(pre)              ∈ (-1, 0) for pre < 0
+    // Approach A (FlatBuffer threshold override) fixes this fully — negative values
+    // pass through the hardware without clipping. That is the true tanh parity path.
 
     // Run 50 steps of Approach B and native bounded ReLU
     let mut native_state = vec![0.0f32; rs];

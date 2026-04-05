@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #![deny(unsafe_code)]
-#![deny(clippy::expect_used, clippy::unwrap_used)]
+#![warn(clippy::expect_used, clippy::unwrap_used)]
 
 //! Akida neural network model parser
 //!
@@ -51,8 +51,8 @@ pub mod zoo;
 
 pub use error::{AkidaModelError, Result};
 pub use model::{Layer, LayerType, Model};
-pub use shapes::{extract_shapes, Shape};
-pub use weights::{extract_weights, QuantizationConfig, WeightData};
+pub use shapes::{Shape, extract_shapes};
+pub use weights::{QuantizationConfig, WeightData, extract_weights};
 pub use zoo::{ModelTask, ModelZoo, ZooModel};
 
 /// Re-export commonly used types

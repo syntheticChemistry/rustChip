@@ -20,3 +20,6 @@ clap         = { workspace = true }
 [[bin]]
 name = "akida"
 path = "src/main.rs"
+
+[lints]
+workspace = true

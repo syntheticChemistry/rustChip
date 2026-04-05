@@ -92,7 +92,10 @@ impl WeightData {
             for bit_idx in 0..8 {
                 let bit = (byte >> bit_idx) & 1;
                 let quantized = i32::from(bit) - self.quantization.offset;
-                #[allow(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "Quantized integer to f32 for dequantized weights"
+                )]
                 let weight = quantized as f32 * self.quantization.scale;
                 weights.push(weight);
             }
@@ -105,7 +108,10 @@ impl WeightData {
             for shift in (0..8).step_by(2) {
                 let value = (byte >> shift) & 0b11;
                 let quantized = i32::from(value) - self.quantization.offset;
-                #[allow(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "Quantized integer to f32 for dequantized weights"
+                )]
                 let weight = quantized as f32 * self.quantization.scale;
                 weights.push(weight);
             }
@@ -118,14 +124,20 @@ impl WeightData {
             // Low nibble
             let low = byte & 0x0F;
             let quantized_low = i32::from(low) - self.quantization.offset;
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "Quantized integer to f32 for dequantized weights"
+            )]
             let weight_low = quantized_low as f32 * self.quantization.scale;
             weights.push(weight_low);
 
             // High nibble
             let high = (byte >> 4) & 0x0F;
             let quantized_high = i32::from(high) - self.quantization.offset;
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "Quantized integer to f32 for dequantized weights"
+            )]
             let weight_high = quantized_high as f32 * self.quantization.scale;
             weights.push(weight_high);
         }
@@ -135,7 +147,10 @@ impl WeightData {
     fn decode_8bit(&self, weights: &mut Vec<f32>) {
         for &byte in self.data.as_ref() {
             let quantized = i32::from(byte) - self.quantization.offset;
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "Quantized integer to f32 for dequantized weights"
+            )]
             let weight = quantized as f32 * self.quantization.scale;
             weights.push(weight);
         }

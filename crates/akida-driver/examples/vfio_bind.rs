@@ -106,7 +106,9 @@ fn cmd_bind() {
     };
     println!("Binding {addr} to {VFIO_PCI_DRIVER}...");
     println!("  Step 1: add vfio-pci to /sys/bus/pci/drivers/vfio-pci/new_id");
-    println!("    echo '{AKIDA_VENDOR_ID:04x} {AKIDA_DEVICE_ID:04x}' > /sys/bus/pci/drivers/vfio-pci/new_id");
+    println!(
+        "    echo '{AKIDA_VENDOR_ID:04x} {AKIDA_DEVICE_ID:04x}' > /sys/bus/pci/drivers/vfio-pci/new_id"
+    );
     println!("  Step 2: unbind from current driver");
     println!("    echo '{addr}' > /sys/bus/pci/devices/{addr}/driver/unbind");
     println!("  Step 3: bind to vfio-pci");

@@ -22,7 +22,7 @@
 
 use akida_models::zoo::{ModelZoo, ZooModel};
 use std::env;
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 use tracing_subscriber::FmtSubscriber;
 
 fn main() {

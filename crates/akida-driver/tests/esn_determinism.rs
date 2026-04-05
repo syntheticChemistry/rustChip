@@ -14,7 +14,10 @@ fn make_test_input(size: usize, seed: u64) -> Vec<f32> {
             s ^= s << 13;
             s ^= s >> 7;
             s ^= s << 17;
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "Test float comparison tolerance"
+            )]
             let v = (s % 10000) as f32 / 10000.0;
             v * 2.0 - 1.0
         })

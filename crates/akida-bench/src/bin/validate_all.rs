@@ -35,8 +35,8 @@
 //!   cargo run --bin validate_all -- --verbose # show detail for each check
 
 use akida_driver::{
-    backends::software::{pack_software_model, SoftwareBackend},
     DeviceManager, NpuBackend,
+    backends::software::{SoftwareBackend, pack_software_model},
 };
 use anyhow::Result;
 use std::time::Instant;

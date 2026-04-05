@@ -58,7 +58,7 @@ use crate::backend::{BackendType, ModelHandle, NpuBackend};
 use crate::backends::read_hwmon_power;
 use crate::capabilities::Capabilities;
 use crate::error::{AkidaError, Result};
-use crate::mmio::{regs, Bar, MappedRegion};
+use crate::mmio::{Bar, MappedRegion, regs};
 use rustix::mm::{mlock, munlock};
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -102,13 +102,16 @@ mod ioctls {
 
     // VFIO device ioctls
     pub const VFIO_DEVICE_GET_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 7);
-    #[allow(dead_code)] // For future region queries
+    #[expect(
+        dead_code,
+        reason = "VFIO ioctl constant reserved for future region queries"
+    )]
     pub const VFIO_DEVICE_GET_REGION_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 8);
-    #[allow(dead_code)] // For future IRQ support
+    #[expect(dead_code, reason = "Reserved for future IRQ support")]
     pub const VFIO_DEVICE_GET_IRQ_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 9);
-    #[allow(dead_code)] // For future IRQ support
+    #[expect(dead_code, reason = "Reserved for future IRQ support")]
     pub const VFIO_DEVICE_SET_IRQS: c_ulong = io(VFIO_TYPE, VFIO_BASE + 10);
-    #[allow(dead_code)] // For future device reset
+    #[expect(dead_code, reason = "Reserved for future device reset")]
     pub const VFIO_DEVICE_RESET: c_ulong = io(VFIO_TYPE, VFIO_BASE + 11);
 
     // IOMMU DMA mapping
@@ -119,13 +122,13 @@ mod ioctls {
     pub const VFIO_API_VERSION: i32 = 0;
 
     // IOMMU types
-    #[allow(dead_code)] // Type1 v1
+    #[expect(dead_code, reason = "IOMMU type constant for Type1 v1 compatibility")]
     pub const VFIO_TYPE1_IOMMU: u32 = 1;
     pub const VFIO_TYPE1V2_IOMMU: u32 = 3;
 
     // Group status flags
     pub const VFIO_GROUP_FLAGS_VIABLE: u32 = 1 << 0;
-    #[allow(dead_code)] // For status checking
+    #[expect(dead_code, reason = "Group status flag reserved for status checks")]
     pub const VFIO_GROUP_FLAGS_CONTAINER_SET: u32 = 1 << 1;
 
     // DMA map flags
@@ -146,7 +149,7 @@ struct VfioDeviceInfo {
 /// VFIO region info structure
 #[repr(C)]
 #[derive(Debug, Default)]
-#[allow(dead_code)] // For future region queries
+#[expect(dead_code, reason = "Struct layout reserved for future region queries")]
 struct VfioRegionInfo {
     argsz: u32,
     flags: u32,
@@ -196,7 +199,7 @@ pub struct VfioBackend {
     /// VFIO container file descriptor
     container: File,
     /// VFIO group file descriptor (kept open for lifetime)
-    #[allow(dead_code)] // Needed for VFIO lifetime
+    #[expect(dead_code, reason = "Group fd must stay open for VFIO lifetime")]
     group: File,
     /// VFIO device file descriptor (for MMIO access)
     device: File,
@@ -252,7 +255,10 @@ impl VfioBackend {
     }
 
     /// Write a 64-bit IOVA address and size to MMIO registers (addr_lo, addr_hi, size_reg).
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "IOVA and size fit hardware register widths"
+    )]
     fn write_iova_regs(
         &self,
         addr_lo: usize,

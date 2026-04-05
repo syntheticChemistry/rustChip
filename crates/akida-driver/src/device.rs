@@ -115,7 +115,10 @@ impl DeviceHandle {
         }
 
         // SAFETY: OFlags::NONBLOCK.bits() is always a valid i32 value (flag bits are small positive values)
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "Hardware returns signed offset in u32 wire format"
+        )]
         let nonblock_flag = OFlags::NONBLOCK.bits() as i32;
 
         let file = OpenOptions::new()

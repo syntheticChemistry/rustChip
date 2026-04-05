@@ -115,7 +115,6 @@ impl MeshTopology {
         let (x, y, z) = if functional <= 80 {
             (5, 8, 2)
         } else {
-            #[allow(clippy::cast_possible_truncation)]
             let n = functional.min(255) as u8;
             (n, 1, 1)
         };
@@ -525,7 +524,10 @@ impl Capabilities {
             if let Ok(temp_str) = std::fs::read_to_string(&temp_input_path) {
                 if let Ok(temp_millic) = temp_str.trim().parse::<i32>() {
                     // Precision loss acceptable: temperature is inherently imprecise
-                    #[allow(clippy::cast_precision_loss)]
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "Millidegrees to f32 °C for display"
+                    )]
                     let temp_c = temp_millic as f32 / 1000.0;
                     tracing::info!("Queried temperature: {:.1}°C", temp_c);
                     return Some(temp_c);
@@ -615,7 +617,10 @@ impl Capabilities {
             Ok(cfg) => {
                 let sram_size_hint = u64::from(cfg.region_0) * u64::from(cfg.region_1);
                 if sram_size_hint > 0 {
-                    #[allow(clippy::cast_possible_truncation)]
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "SRAM size estimate fits MB counter"
+                    )]
                     let mb = (sram_size_hint / (1024 * 1024)).max(1) as u32;
                     tracing::info!(
                         "SRAM from BAR0: region_0={:#x}, region_1={:#x} → {mb} MB estimate",

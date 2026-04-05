@@ -5,8 +5,9 @@
 //! Deep Debt: Tests verify both kernel and userspace backends produce identical results
 
 use akida_driver::{
+    BackendSelection, NpuBackend,
     backends::{KernelBackend, UserspaceBackend},
-    select_backend, BackendSelection, NpuBackend,
+    select_backend,
 };
 
 /// Test that both backends discover the same capabilities

@@ -163,7 +163,10 @@ impl ProgramBuilder {
         Ok(allocations)
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(
+        clippy::unused_self,
+        reason = "Placeholder serializer; self reserved for future format work"
+    )]
     fn serialize(&self, _allocation: &[NpAllocation]) -> Result<(Vec<u8>, Vec<u8>), BuildError> {
         // Placeholder: actual FlatBuffer serialization will be implemented
         // once the full program_info/program_data binary format is confirmed.

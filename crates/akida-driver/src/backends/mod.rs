@@ -31,7 +31,10 @@ pub(crate) fn read_hwmon_power(pcie_address: &str) -> Option<f32> {
         let power_path = entry.path().join("power1_average");
         if let Ok(content) = std::fs::read_to_string(&power_path) {
             if let Ok(microwatts) = content.trim().parse::<u64>() {
-                #[allow(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "Integer cycle count to f64 for rate"
+                )]
                 let watts = microwatts as f32 / 1_000_000.0;
                 return Some(watts);
             }

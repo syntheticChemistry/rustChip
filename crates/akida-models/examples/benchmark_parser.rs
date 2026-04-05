@@ -15,7 +15,9 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
         eprintln!("Usage: cargo run --example benchmark_parser -- <model1.fbz> [model2.fbz ...]");
-        eprintln!("Example: cargo run --example benchmark_parser -- /path/to/model1.fbz /path/to/model2.fbz");
+        eprintln!(
+            "Example: cargo run --example benchmark_parser -- /path/to/model1.fbz /path/to/model2.fbz"
+        );
         std::process::exit(1);
     }
     let models = args;

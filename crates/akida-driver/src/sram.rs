@@ -348,7 +348,10 @@ impl SramAccessor {
         let mut results = Vec::with_capacity(points.len());
 
         for point in &points {
-            #[allow(clippy::cast_possible_truncation)]
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "SRAM address fits register width"
+            )]
             let offset = point.offset as usize;
             if offset + 4 > bar1_size {
                 results.push(ProbeResult {

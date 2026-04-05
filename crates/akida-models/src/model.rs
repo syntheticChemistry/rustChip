@@ -4,7 +4,7 @@
 
 use crate::error::{AkidaModelError, Result};
 use crate::parser;
-use crate::weights::{extract_weights, WeightData};
+use crate::weights::{WeightData, extract_weights};
 use std::fs;
 use std::path::Path;
 

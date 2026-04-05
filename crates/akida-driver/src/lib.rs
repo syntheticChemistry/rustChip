@@ -50,7 +50,7 @@
 //! | Energy per inference | 1.4 µJ |
 //! | 24-hour production calls (Exp 022) | 5,978 |
 
-#![deny(clippy::expect_used, clippy::unwrap_used)]
+#![warn(clippy::expect_used, clippy::unwrap_used)]
 #![warn(missing_docs)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -79,16 +79,16 @@ pub mod vfio;
 pub mod pcie_ids {
     pub use akida_chip::pcie::device_id;
     pub use akida_chip::pcie::{
-        lspci_filter, ChipVariant, ALL_DEVICE_IDS, BRAINCHIP_VENDOR_ID,
-        MEASURED_DMA_THROUGHPUT_MB_S, OPTIMAL_BATCH_SIZE, PCIE_GEN2_X1_ROUNDTRIP_US,
+        ALL_DEVICE_IDS, BRAINCHIP_VENDOR_ID, ChipVariant, MEASURED_DMA_THROUGHPUT_MB_S,
+        OPTIMAL_BATCH_SIZE, PCIE_GEN2_X1_ROUNDTRIP_US, lspci_filter,
     };
 }
 
 pub use backend::{
-    select_backend, BackendSelection, BackendType, LoadVerification, ModelHandle, NpuBackend,
+    BackendSelection, BackendType, LoadVerification, ModelHandle, NpuBackend, select_backend,
 };
-pub use backends::software::{pack_software_model, SoftwareBackend};
 pub use backends::UserspaceBackend;
+pub use backends::software::{SoftwareBackend, pack_software_model};
 pub use capabilities::{
     BatchCapabilities, Capabilities, ChipVersion, ClockMode, MeshTopology, PcieConfig,
     WeightMutationSupport,

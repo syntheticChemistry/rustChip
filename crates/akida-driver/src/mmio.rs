@@ -19,7 +19,7 @@
 #![allow(clippy::items_after_statements)] // VFIO ioctl constants near usage
 
 use crate::error::{AkidaError, Result};
-use rustix::mm::{mmap, munmap, MapFlags, ProtFlags};
+use rustix::mm::{MapFlags, ProtFlags, mmap, munmap};
 use std::fs::File;
 use std::os::unix::io::{AsFd, AsRawFd};
 
@@ -156,7 +156,10 @@ impl MappedRegion {
     /// - Memory mapping the BAR region fails
     pub fn map(device_fd: &File, bar: Bar) -> Result<Self> {
         // Query region info
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "Byte offset fits usize for slice indexing"
+        )]
         let mut region_info = VfioRegionInfo {
             argsz: std::mem::size_of::<VfioRegionInfo>() as u32,
             index: bar as u32,
@@ -310,7 +313,10 @@ impl Drop for MappedRegion {
 }
 
 #[cfg(test)]
-#[allow(clippy::assertions_on_constants)] // Compile-time constant validation tests
+#[expect(
+    clippy::assertions_on_constants,
+    reason = "Compile-time constant validation tests"
+)]
 mod tests {
     use super::*;
 

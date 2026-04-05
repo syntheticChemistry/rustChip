@@ -5,7 +5,7 @@
 //! Verifies that models can be parsed, queried, and that stub models
 //! created by the zoo pass validation.
 
-use akida_models::{zoo::ModelZoo, zoo::ZooModel, Model};
+use akida_models::{Model, zoo::ModelZoo, zoo::ZooModel};
 
 fn make_stub_fbz(version: &str) -> Vec<u8> {
     let mut data = Vec::with_capacity(512);

@@ -139,13 +139,19 @@ pub fn measure_puf(sram: &mut SramAccessor, config: &PufConfig) -> Result<PufSig
             .ok_or_else(|| AkidaError::invalid_state(format!("NP {np} out of range")))?;
 
         // Write known pattern
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "PUF word index fits u32 register write"
+        )]
         sram.write_bar1(base_offset as usize, &expected)?;
 
         // Read back (average over multiple probes for noise reduction)
         let mut accumulated = vec![0i32; config.bytes_per_np];
         for _ in 0..config.probes_per_np {
-            #[allow(clippy::cast_possible_truncation)]
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "PUF word index fits u32 register write"
+            )]
             let readback = sram.read_bar1(base_offset as usize, config.bytes_per_np)?;
             for (acc, &byte) in accumulated.iter_mut().zip(readback.iter()) {
                 *acc += i32::from(byte);

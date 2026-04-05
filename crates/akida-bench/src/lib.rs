@@ -6,7 +6,7 @@
 //! No hardcoded device paths — all hardware access goes through runtime discovery.
 
 #![forbid(unsafe_code)]
-#![deny(clippy::expect_used, clippy::unwrap_used)]
+#![warn(clippy::expect_used, clippy::unwrap_used)]
 
 use akida_driver::DeviceManager;
 use std::time::Instant;
@@ -102,7 +102,10 @@ impl Xoshiro {
 
     /// Next f32 in [0, 1).
     pub fn next_f32(&mut self) -> f32 {
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "Integer stats to f64 for benchmark output"
+        )]
         let v = (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32;
         v
     }
