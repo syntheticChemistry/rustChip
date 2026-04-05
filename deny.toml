@@ -1,3 +1,7 @@
+# Known native (C) dependencies — documented for policy / cargo-deny review:
+# - libc: VFIO ioctls and ioctl request constants; required for hardware register/device
+#   access (no safe rustix equivalent for these VFIO ioctls).
+
 [advisories]
 vulnerability = "deny"
 unmaintained = "warn"

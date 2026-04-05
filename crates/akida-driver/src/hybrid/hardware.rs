@@ -75,7 +75,7 @@ impl ScaleTrickConfig {
 /// a real `device.infer()` call. The math — and the API — stay identical.
 ///
 /// **`HardwareNative` (bounded ReLU)**
-/// Requires MetaTF-compiled weights. For hotSpring/toadStool use `HardwareLinear`.
+/// Requires MetaTF-compiled weights. For hotSpring/toadStool use `HardwareLinear` (ecosystem context — not a runtime dependency).
 pub(super) struct HardwareEsnExecutor {
     pub(super) reservoir_dim: usize,
     pub(super) input_dim: usize,

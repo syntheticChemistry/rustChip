@@ -2,6 +2,10 @@
 
 //! Hybrid ESN executor and substrate abstraction.
 //!
+//! **Ecosystem context — not a runtime dependency:** Names such as hotSpring, toadStool, and
+//! barracuda refer to other repos in the ecoPrimals suite for readers; this crate does not link
+//! them as Cargo dependencies.
+//!
 //! # The Problem This Solves
 //!
 //! The AKD1000 uses bounded ReLU as its activation function. Reservoir computing
@@ -82,7 +86,10 @@ use crate::error::{AkidaError, Result};
 use tracing::{debug, info};
 
 mod hardware;
+mod software;
+
 use hardware::{HardwareEsnExecutor, ScaleTrickConfig};
+use software::SoftwareEsnExecutor;
 
 // ── Substrate mode ────────────────────────────────────────────────────────────
 
@@ -526,12 +533,12 @@ impl EsnSubstrate for HybridEsn {
 
     fn reservoir_state(&self) -> Vec<f32> {
         match self.mode {
-            SubstrateMode::PureSoftware => self.sw_backend.state.clone(),
+            SubstrateMode::PureSoftware => self.sw_backend.reservoir_state(),
             _ => self
                 .hw_backend
                 .as_ref()
                 .map(|hw| hw.state.clone())
-                .unwrap_or_else(|| self.sw_backend.state.clone()),
+                .unwrap_or_else(|| self.sw_backend.reservoir_state()),
         }
     }
 
@@ -546,75 +553,6 @@ impl EsnSubstrate for HybridEsn {
     }
     fn substrate_mode(&self) -> SubstrateMode {
         self.mode.clone()
-    }
-}
-
-// ── Internal: software executor ───────────────────────────────────────────────
-
-/// Pure f32 + tanh ESN executor (powers PureSoftware mode).
-struct SoftwareEsnExecutor {
-    input_dim: usize,
-    reservoir_dim: usize,
-    output_dim: usize,
-    w_in: Vec<f32>,
-    w_res: Vec<f32>,
-    w_out: Vec<f32>,
-    state: Vec<f32>,
-    leak: f32,
-}
-
-impl SoftwareEsnExecutor {
-    fn new(w: &EsnWeights) -> Self {
-        Self {
-            input_dim: w.input_dim,
-            reservoir_dim: w.reservoir_dim,
-            output_dim: w.output_dim,
-            w_in: w.w_in.clone(),
-            w_res: w.w_res.clone(),
-            w_out: w.w_out.clone(),
-            state: vec![0.0f32; w.reservoir_dim],
-            leak: w.leak_rate,
-        }
-    }
-
-    fn step(&mut self, input: &[f32]) -> Result<Vec<f32>> {
-        let rs = self.reservoir_dim;
-        let is = self.input_dim;
-        if input.len() != is {
-            return Err(AkidaError::capability_query_failed(format!(
-                "step: input len {} != input_dim {}",
-                input.len(),
-                is
-            )));
-        }
-        let alpha = self.leak;
-        let mut pre = vec![0.0f32; rs];
-        for i in 0..rs {
-            for j in 0..is {
-                pre[i] += self.w_in[i * is + j] * input[j];
-            }
-            for j in 0..rs {
-                pre[i] += self.w_res[i * rs + j] * self.state[j];
-            }
-        }
-        for i in 0..rs {
-            // tanh — the critical activation for echo state property
-            self.state[i] = (1.0 - alpha) * self.state[i] + alpha * pre[i].tanh();
-        }
-        let os = self.output_dim;
-        Ok((0..os)
-            .map(|i| {
-                self.w_out[i * rs..(i + 1) * rs]
-                    .iter()
-                    .zip(self.state.iter())
-                    .map(|(w, s)| w * s)
-                    .sum()
-            })
-            .collect())
-    }
-
-    fn reset(&mut self) {
-        self.state.fill(0.0);
     }
 }
 

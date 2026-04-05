@@ -54,14 +54,20 @@
 //! - VFIO ioctls use libc: rustix::ioctl requires Ioctl trait impl per variant;
 //!   VFIO has 9+ ioctls with varied semantics (int, struct, fd ptr, C string).
 
+mod container;
+mod dma;
+mod ioctls;
+
+pub use dma::DmaBuffer;
+
 use crate::backend::{BackendType, ModelHandle, NpuBackend};
 use crate::backends::read_hwmon_power;
 use crate::capabilities::Capabilities;
 use crate::error::{AkidaError, Result};
 use crate::mmio::{Bar, MappedRegion, regs};
-use rustix::mm::{mlock, munlock};
-use std::fs::{File, OpenOptions};
-use std::os::unix::io::{AsRawFd, RawFd};
+use container::{query_device_info, VfioContainer, VfioGroup};
+use std::fs::File;
+use std::os::unix::io::AsRawFd;
 
 /// Parameters for polling a status register.
 #[derive(Clone, Copy)]
@@ -74,122 +80,6 @@ struct PollConfig<'a> {
     timeout_msg: &'a str,
     error_msg: &'a str,
 }
-
-/// VFIO ioctl numbers (from Linux kernel headers)
-///
-/// These are calculated as: _IO(';', base + offset)
-/// where _IO is: ((type as u64) << 8) | nr
-mod ioctls {
-    use std::os::raw::c_ulong;
-
-    /// Helper to create ioctl number: _IO(type, nr) = (type << 8) | nr
-    const fn io(ty: u8, nr: u8) -> c_ulong {
-        ((ty as c_ulong) << 8) | (nr as c_ulong)
-    }
-
-    pub const VFIO_TYPE: u8 = b';';
-    pub const VFIO_BASE: u8 = 100;
-
-    // VFIO container ioctls
-    pub const VFIO_GET_API_VERSION: c_ulong = io(VFIO_TYPE, VFIO_BASE);
-    pub const VFIO_CHECK_EXTENSION: c_ulong = io(VFIO_TYPE, VFIO_BASE + 1);
-    pub const VFIO_SET_IOMMU: c_ulong = io(VFIO_TYPE, VFIO_BASE + 2);
-
-    // VFIO group ioctls
-    pub const VFIO_GROUP_GET_STATUS: c_ulong = io(VFIO_TYPE, VFIO_BASE + 3);
-    pub const VFIO_GROUP_SET_CONTAINER: c_ulong = io(VFIO_TYPE, VFIO_BASE + 4);
-    pub const VFIO_GROUP_GET_DEVICE_FD: c_ulong = io(VFIO_TYPE, VFIO_BASE + 6);
-
-    // VFIO device ioctls
-    pub const VFIO_DEVICE_GET_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 7);
-    #[expect(
-        dead_code,
-        reason = "VFIO ioctl constant reserved for future region queries"
-    )]
-    pub const VFIO_DEVICE_GET_REGION_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 8);
-    #[expect(dead_code, reason = "Reserved for future IRQ support")]
-    pub const VFIO_DEVICE_GET_IRQ_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 9);
-    #[expect(dead_code, reason = "Reserved for future IRQ support")]
-    pub const VFIO_DEVICE_SET_IRQS: c_ulong = io(VFIO_TYPE, VFIO_BASE + 10);
-    #[expect(dead_code, reason = "Reserved for future device reset")]
-    pub const VFIO_DEVICE_RESET: c_ulong = io(VFIO_TYPE, VFIO_BASE + 11);
-
-    // IOMMU DMA mapping
-    pub const VFIO_IOMMU_MAP_DMA: c_ulong = io(VFIO_TYPE, VFIO_BASE + 13);
-    pub const VFIO_IOMMU_UNMAP_DMA: c_ulong = io(VFIO_TYPE, VFIO_BASE + 14);
-
-    // API version
-    pub const VFIO_API_VERSION: i32 = 0;
-
-    // IOMMU types
-    #[expect(dead_code, reason = "IOMMU type constant for Type1 v1 compatibility")]
-    pub const VFIO_TYPE1_IOMMU: u32 = 1;
-    pub const VFIO_TYPE1V2_IOMMU: u32 = 3;
-
-    // Group status flags
-    pub const VFIO_GROUP_FLAGS_VIABLE: u32 = 1 << 0;
-    #[expect(dead_code, reason = "Group status flag reserved for status checks")]
-    pub const VFIO_GROUP_FLAGS_CONTAINER_SET: u32 = 1 << 1;
-
-    // DMA map flags
-    pub const VFIO_DMA_MAP_FLAG_READ: u32 = 1 << 0;
-    pub const VFIO_DMA_MAP_FLAG_WRITE: u32 = 1 << 1;
-}
-
-/// VFIO device info structure
-#[repr(C)]
-#[derive(Debug, Default)]
-struct VfioDeviceInfo {
-    argsz: u32,
-    flags: u32,
-    num_regions: u32,
-    num_irqs: u32,
-}
-
-/// VFIO region info structure
-#[repr(C)]
-#[derive(Debug, Default)]
-#[expect(dead_code, reason = "Struct layout reserved for future region queries")]
-struct VfioRegionInfo {
-    argsz: u32,
-    flags: u32,
-    index: u32,
-    cap_offset: u32,
-    size: u64,
-    offset: u64,
-}
-
-/// VFIO group status structure
-#[repr(C)]
-#[derive(Debug, Default)]
-struct VfioGroupStatus {
-    argsz: u32,
-    flags: u32,
-}
-
-/// VFIO DMA map structure
-#[repr(C)]
-#[derive(Debug, Default)]
-struct VfioDmaMap {
-    argsz: u32,
-    flags: u32,
-    vaddr: u64,
-    iova: u64,
-    size: u64,
-}
-
-/// VFIO DMA unmap structure
-#[repr(C)]
-#[derive(Debug, Default)]
-struct VfioDmaUnmap {
-    argsz: u32,
-    flags: u32,
-    iova: u64,
-    size: u64,
-}
-
-mod dma;
-pub use dma::DmaBuffer;
 
 /// VFIO NPU backend with DMA support
 #[derive(Debug)]
@@ -224,22 +114,7 @@ pub struct VfioBackend {
 impl VfioBackend {
     /// Find IOMMU group for a PCIe device
     fn find_iommu_group(pcie_address: &str) -> Result<u32> {
-        let iommu_group_path = format!("/sys/bus/pci/devices/{pcie_address}/iommu_group");
-
-        let link = std::fs::read_link(&iommu_group_path).map_err(|e| {
-            AkidaError::capability_query_failed(format!(
-                "Cannot read IOMMU group for {pcie_address}: {e}. Is IOMMU enabled?"
-            ))
-        })?;
-
-        let group_name = link
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| AkidaError::capability_query_failed("Invalid IOMMU group path"))?;
-
-        group_name.parse::<u32>().map_err(|e| {
-            AkidaError::capability_query_failed(format!("Invalid IOMMU group number: {e}"))
-        })
+        container::find_iommu_group(pcie_address)
     }
 
     /// Allocate a DMA buffer
@@ -397,168 +272,14 @@ impl NpuBackend for VfioBackend {
     fn init(pcie_address: &str) -> Result<Self> {
         tracing::info!("Initializing VFIO backend for {pcie_address}");
 
-        // Find IOMMU group
         let iommu_group = Self::find_iommu_group(pcie_address)?;
         tracing::debug!("IOMMU group: {iommu_group}");
 
-        // Open VFIO container
-        let container = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open("/dev/vfio/vfio")
-            .map_err(|e| {
-                AkidaError::capability_query_failed(format!("Cannot open /dev/vfio/vfio: {e}"))
-            })?;
+        let vfio_container = VfioContainer::open_and_validate()?;
+        let vfio_group = VfioGroup::open_attach_and_validate(iommu_group, &vfio_container)?;
+        let device = vfio_group.open_device(pcie_address)?;
 
-        // SAFETY: VFIO_GET_API_VERSION ioctl necessary - queries kernel VFIO API version.
-        // Invariants: (1) container fd valid from open; (2) _IO(no arg) returns int; (3) kernel
-        // returns API version or -errno. Caller guarantees: container is /dev/vfio/vfio.
-        let api_version =
-            unsafe { libc::ioctl(container.as_raw_fd(), ioctls::VFIO_GET_API_VERSION as _) };
-
-        if api_version != ioctls::VFIO_API_VERSION {
-            return Err(AkidaError::capability_query_failed(format!(
-                "Unsupported VFIO API version: {api_version}"
-            )));
-        }
-
-        // SAFETY: VFIO_CHECK_EXTENSION ioctl necessary - queries kernel for Type1v2 IOMMU.
-        // Invariants: (1) container fd valid; (2) third arg is extension id (VFIO_TYPE1V2_IOMMU);
-        // (3) kernel returns 1 if supported, 0 otherwise. Caller guarantees: container open.
-        let has_type1 = unsafe {
-            libc::ioctl(
-                container.as_raw_fd(),
-                ioctls::VFIO_CHECK_EXTENSION as _,
-                ioctls::VFIO_TYPE1V2_IOMMU,
-            )
-        };
-
-        if has_type1 != 1 {
-            return Err(AkidaError::capability_query_failed(
-                "VFIO Type1v2 IOMMU not supported",
-            ));
-        }
-
-        // Open IOMMU group
-        let group_path = format!("/dev/vfio/{iommu_group}");
-        let group = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&group_path)
-            .map_err(|e| {
-                AkidaError::capability_query_failed(format!("Cannot open {group_path}: {e}"))
-            })?;
-
-        // Check group is viable
-        let mut group_status = VfioGroupStatus {
-            argsz: std::mem::size_of::<VfioGroupStatus>() as u32,
-            flags: 0,
-        };
-
-        // SAFETY: VFIO_GROUP_GET_STATUS ioctl necessary - kernel fills group_status.
-        // Invariants: (1) group fd valid from open; (2) _IOWR reads/writes group_status;
-        // (3) layout matches kernel. Caller guarantees: group is /dev/vfio/N.
-        let ret = unsafe {
-            libc::ioctl(
-                group.as_raw_fd(),
-                ioctls::VFIO_GROUP_GET_STATUS as _,
-                &raw mut group_status,
-            )
-        };
-
-        if ret < 0 || (group_status.flags & ioctls::VFIO_GROUP_FLAGS_VIABLE) == 0 {
-            return Err(AkidaError::capability_query_failed(
-                "VFIO group not viable (all devices must be bound to vfio-pci)",
-            ));
-        }
-
-        // SAFETY: VFIO_GROUP_SET_CONTAINER ioctl necessary - attaches group to container.
-        // Invariants: (1) group fd valid; (2) third arg is ptr to container fd; (3) kernel
-        // reads fd. Caller guarantees: group viable, container open.
-        let ret = unsafe {
-            libc::ioctl(
-                group.as_raw_fd(),
-                ioctls::VFIO_GROUP_SET_CONTAINER as _,
-                std::ptr::from_ref(&container.as_raw_fd()),
-            )
-        };
-
-        if ret < 0 {
-            return Err(AkidaError::capability_query_failed(format!(
-                "Failed to set container: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
-
-        // SAFETY: VFIO_SET_IOMMU ioctl necessary - enables Type1v2 IOMMU in container.
-        // Invariants: (1) container fd valid; (2) third arg is IOMMU type; (3) kernel enables.
-        // Caller guarantees: group set, Type1v2 supported.
-        let ret = unsafe {
-            libc::ioctl(
-                container.as_raw_fd(),
-                ioctls::VFIO_SET_IOMMU as _,
-                ioctls::VFIO_TYPE1V2_IOMMU,
-            )
-        };
-
-        if ret < 0 {
-            return Err(AkidaError::capability_query_failed(format!(
-                "Failed to set IOMMU: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
-
-        // Get device fd
-        let pcie_address_cstr = std::ffi::CString::new(pcie_address).map_err(|e| {
-            AkidaError::capability_query_failed(format!("Invalid PCIe address: {e}"))
-        })?;
-
-        // SAFETY: VFIO_GROUP_GET_DEVICE_FD ioctl necessary - opens device fd by PCIe address.
-        // Invariants: (1) group fd valid; (2) pcie_address_cstr null-terminated; (3) kernel
-        // reads string, returns device fd or -1. Caller guarantees: device in group.
-        let device_fd = unsafe {
-            libc::ioctl(
-                group.as_raw_fd(),
-                ioctls::VFIO_GROUP_GET_DEVICE_FD as _,
-                pcie_address_cstr.as_ptr(),
-            )
-        };
-
-        if device_fd < 0 {
-            return Err(AkidaError::capability_query_failed(format!(
-                "Failed to get device fd: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
-
-        // SAFETY: from_raw_fd necessary - device_fd from VFIO ioctl, ownership transferred.
-        // Invariants: (1) device_fd is valid open fd; (2) we take ownership, File will close it.
-        // Caller guarantees: device_fd >= 0 (checked above).
-        let device = unsafe { File::from_raw_fd(device_fd) };
-
-        // Query device info
-        let mut device_info = VfioDeviceInfo {
-            argsz: std::mem::size_of::<VfioDeviceInfo>() as u32,
-            ..Default::default()
-        };
-
-        // SAFETY: VFIO_DEVICE_GET_INFO ioctl necessary - kernel fills device_info (regions, IRQs).
-        // Invariants: (1) device fd valid; (2) _IOWR reads/writes device_info; (3) layout matches.
-        // Caller guarantees: device fd from VFIO_GROUP_GET_DEVICE_FD.
-        let ret = unsafe {
-            libc::ioctl(
-                device.as_raw_fd(),
-                ioctls::VFIO_DEVICE_GET_INFO as _,
-                &raw mut device_info,
-            )
-        };
-
-        if ret < 0 {
-            return Err(AkidaError::capability_query_failed(format!(
-                "Failed to get device info: {}",
-                std::io::Error::last_os_error()
-            )));
-        }
+        let device_info = query_device_info(&device)?;
 
         tracing::info!(
             "VFIO device: {} regions, {} IRQs",
@@ -566,14 +287,12 @@ impl NpuBackend for VfioBackend {
             device_info.num_irqs
         );
 
-        // Map BAR0 for control registers
         let control_regs = MappedRegion::map(&device, Bar::Control)?;
         tracing::info!(
             "Mapped BAR0 control registers ({} bytes)",
             control_regs.size()
         );
 
-        // Query capabilities from sysfs (same as userspace backend)
         let capabilities = Capabilities::from_sysfs(pcie_address)?;
 
         tracing::info!(
@@ -584,8 +303,8 @@ impl NpuBackend for VfioBackend {
 
         Ok(Self {
             pcie_address: pcie_address.to_string(),
-            container,
-            group,
+            container: vfio_container.file,
+            group: vfio_group.file,
             device,
             control_regs,
             mesh_region: None,
@@ -652,7 +371,6 @@ impl NpuBackend for VfioBackend {
 
         self.check_not_busy("load reservoir")?;
 
-        // Allocate DMA buffer
         let mut buffer = self.alloc_dma(total_size)?;
         let slice = buffer.as_mut_slice();
         slice[..w_in_bytes.len()].copy_from_slice(w_in_bytes);
@@ -696,7 +414,6 @@ impl NpuBackend for VfioBackend {
 
         let input_bytes = bytemuck::cast_slice::<f32, u8>(input);
 
-        // Ensure input DMA buffer is large enough
         if self
             .input_buffer
             .as_ref()
@@ -898,15 +615,12 @@ impl NpuBackend for VfioBackend {
     }
 }
 
-use std::os::unix::io::FromRawFd;
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_find_iommu_group() {
-        // This test requires actual hardware with IOMMU
         let pcie_address = "0000:a1:00.0";
 
         match VfioBackend::find_iommu_group(pcie_address) {
@@ -921,7 +635,6 @@ mod tests {
 
     #[test]
     fn test_vfio_backend_init() {
-        // This test requires actual hardware bound to vfio-pci
         let pcie_address = "0000:a1:00.0";
 
         match VfioBackend::init(pcie_address) {
@@ -959,7 +672,6 @@ pub fn bind_to_vfio(pcie_address: &str) -> crate::error::Result<()> {
 
     tracing::info!("Binding {} to vfio-pci", pcie_address);
 
-    // Step 1: unbind from current driver
     let driver_unbind = format!("/sys/bus/pci/devices/{pcie_address}/driver/unbind");
     if Path::new(&driver_unbind).exists() {
         std::fs::write(&driver_unbind, pcie_address).map_err(|e| {
@@ -968,7 +680,6 @@ pub fn bind_to_vfio(pcie_address: &str) -> crate::error::Result<()> {
         tracing::info!("Unbound from existing driver");
     }
 
-    // Step 2: add device to vfio-pci
     let new_id = "/sys/bus/pci/drivers/vfio-pci/new_id";
     if Path::new(new_id).exists() {
         std::fs::write(
@@ -982,7 +693,6 @@ pub fn bind_to_vfio(pcie_address: &str) -> crate::error::Result<()> {
         .map_err(|e| AkidaError::hardware_error(format!("Cannot write vfio-pci/new_id: {e}")))?;
     }
 
-    // Step 3: bind
     let bind_path = "/sys/bus/pci/drivers/vfio-pci/bind";
     std::fs::write(bind_path, pcie_address)
         .map_err(|e| AkidaError::hardware_error(format!("Cannot bind to vfio-pci: {e}")))?;
@@ -999,12 +709,10 @@ pub fn bind_to_vfio(pcie_address: &str) -> crate::error::Result<()> {
 pub fn unbind_from_vfio(pcie_address: &str) -> crate::error::Result<()> {
     use crate::error::AkidaError;
 
-    // Unbind from vfio-pci
     let unbind = "/sys/bus/pci/drivers/vfio-pci/unbind";
     std::fs::write(unbind, pcie_address)
         .map_err(|e| AkidaError::hardware_error(format!("Cannot unbind from vfio-pci: {e}")))?;
 
-    // Re-bind to akida_pcie if the module is loaded
     let bind = "/sys/bus/pci/drivers/akida/bind";
     if std::path::Path::new(bind).exists() {
         std::fs::write(bind, pcie_address)

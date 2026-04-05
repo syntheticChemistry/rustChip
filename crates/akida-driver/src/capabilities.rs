@@ -9,7 +9,7 @@
 //!
 //! Capabilities now include mesh topology, clock modes, batch discovery,
 //! and weight mutation support — all validated by hardware probing on a
-//! physical AKD1000 (see `hotSpring/metalForge/npu/akida/BEYOND_SDK.md`).
+//! physical AKD1000 (see `hotSpring/metalForge/npu/akida/BEYOND_SDK.md` — ecosystem context — not a runtime dependency).
 
 use crate::error::{AkidaError, Result};
 

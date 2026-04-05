@@ -87,17 +87,11 @@ impl MmapRegion {
 
         tracing::debug!("BAR size: {size} bytes ({} MB)", size / (1024 * 1024));
 
-        // SAFETY: mmap is unsafe but we validate all preconditions:
-        // - File descriptor is valid (just opened via OpenOptions)
-        // - Size is non-zero (checked above, prevents zero-sized mapping)
-        // - Flags are valid: PROT_READ|PROT_WRITE for MMIO access, MAP_SHARED for device memory
-        // - Offset is 0 (start of BAR)
-        // - rustix returns Result, so we handle errors properly
-        // - We store file in struct to keep fd open for lifetime of mapping
-        // - We unmap in Drop impl to prevent memory leak
-        // - The mapped memory is process-private (no other references exist)
-        //
-        // EVOLVED: Using rustix instead of libc (better error handling, type safety)
+        // SAFETY: `mmap` is required to map the PCIe BAR; rustix wraps the libc mmap contract.
+        // Invariants: fd is valid (opened above), `size` is non-zero (checked), offset 0, and
+        // `ProtFlags`/`MapFlags` match BAR MMIO access. The `File` field keeps the fd alive until
+        // `Drop` runs `munmap`, so the mapping is not unmapped while `MmapRegion` exists.
+        // EVOLVED: rustix instead of raw libc (typed flags and `Result`-based errors).
         let ptr = unsafe {
             let addr = mmap(
                 std::ptr::null_mut(),
@@ -177,19 +171,13 @@ impl MmapRegion {
 
         tracing::trace!("Write u32 @ {offset:#x} = {value:#x}");
 
-        // SAFETY: Volatile write to memory-mapped hardware register.
-        // Invariants that must hold:
-        // - Bounds validated above: offset + 4 <= self.size
-        // - ptr is valid (from successful mmap, stored in NonNull)
-        // - offset + 4 bytes are within mapped region
-        // - Pointer arithmetic: self.ptr.as_ptr().add(offset) is valid (offset < size)
-        // - Cast to *mut u32: PCIe BAR registers are 4-byte aligned per spec
-        // - write_volatile is required: MMIO writes have side effects (trigger hardware
-        //   operations) and compiler must not reorder or optimize these writes
         #[expect(
             clippy::cast_ptr_alignment,
             reason = "MMIO base is device-aligned per BAR"
         )]
+        // SAFETY: `write_volatile` is required for MMIO (hardware side effects).
+        // Invariants: same bounds and pointer validity as `read_u32`; exclusive `&mut self` on the
+        // region serializes writers at the type level.
         unsafe {
             let ptr = self.ptr.as_ptr().add(offset).cast::<u32>();
             ptr.write_volatile(value);
@@ -212,17 +200,10 @@ impl MmapRegion {
             )));
         }
 
-        // SAFETY: copy_nonoverlapping requires:
-        // - src is valid for reads of buffer.len() bytes
-        // - dst is valid for writes of buffer.len() bytes
-        // - src and dst do not overlap
-        // - Both pointers are properly aligned
-        // Invariants that hold:
-        // - Bounds validated above: offset + buffer.len() <= self.size
-        // - src = self.ptr.as_ptr().add(offset) is valid (offset < size, within mapped region)
-        // - dst = buffer.as_mut_ptr() is valid (buffer is a valid mutable slice)
-        // - No overlap: src points to mapped hardware memory, dst points to user buffer
-        // - Alignment: u8 has alignment 1, so both pointers are properly aligned
+        // SAFETY: `copy_nonoverlapping` reads `buffer.len()` bytes from the mapping into `buffer`.
+        // Invariants: `offset + buffer.len() <= self.size` (checked); `self.ptr.add(offset)` is
+        // valid for that length; `buffer.as_mut_ptr()` is valid for writes; src/dst are disjoint
+        // (MMIO vs heap stack). `u8` has align 1.
         unsafe {
             let src = self.ptr.as_ptr().add(offset);
             std::ptr::copy_nonoverlapping(src, buffer.as_mut_ptr(), buffer.len());
@@ -245,17 +226,9 @@ impl MmapRegion {
             )));
         }
 
-        // SAFETY: copy_nonoverlapping requires:
-        // - src is valid for reads of data.len() bytes
-        // - dst is valid for writes of data.len() bytes
-        // - src and dst do not overlap
-        // - Both pointers are properly aligned
-        // Invariants that hold:
-        // - Bounds validated above: offset + data.len() <= self.size
-        // - src = data.as_ptr() is valid (data is a valid slice)
-        // - dst = self.ptr.as_ptr().add(offset) is valid (offset < size, within mapped region)
-        // - No overlap: src points to user data, dst points to mapped hardware memory
-        // - Alignment: u8 has alignment 1, so both pointers are properly aligned
+        // SAFETY: `copy_nonoverlapping` writes `data` into the mapping at `offset`.
+        // Invariants: `offset + data.len() <= self.size` (checked); pointers valid for respective
+        // lengths; regions do not overlap. `u8` has align 1.
         unsafe {
             let dst = self.ptr.as_ptr().add(offset);
             std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len());
@@ -292,15 +265,9 @@ impl Drop for MmapRegion {
             self.size / (1024 * 1024)
         );
 
-        // SAFETY: munmap requires:
-        // - addr must be a pointer returned by mmap
-        // - length must match the length passed to mmap
-        // Invariants that hold:
-        // - self.ptr was created from successful mmap in new()
-        // - self.size matches the size passed to mmap in new()
-        // - The mapping is still valid (we're in Drop, so no use-after-free)
-        //
-        // EVOLVED: Using rustix instead of libc (better error handling)
+        // SAFETY: `munmap` must pair with the `mmap` in `new()` before the fd can be closed.
+        // Invariants: `self.ptr`/`self.size` are exactly the mapping from `new()`; `Drop` runs once.
+        // EVOLVED: rustix `munmap` instead of raw libc.
         unsafe {
             if let Err(e) = munmap(self.ptr.as_ptr().cast(), self.size) {
                 tracing::error!("munmap failed during drop: {e}");

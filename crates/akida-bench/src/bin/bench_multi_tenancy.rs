@@ -7,7 +7,7 @@
 //!
 //! Usage:
 //!   cargo run --bin bench_multi_tenancy             # requires live AKD1000
-//!   cargo run --bin bench_multi_tenancy -- --sw     # SoftwareBackend simulation
+//!   cargo run --bin bench_multi_tenancy -- --sw     # local SoftwareBackend (CPU surrogate)
 //!   cargo run --bin bench_multi_tenancy -- --verbose
 //!
 //! What we measure:
@@ -119,18 +119,20 @@ impl Xoshiro {
     }
 }
 
-// ── SoftwareBackend stub (mirrors akida-driver's SoftwareBackend) ─────────────
+// ── SoftwareBackend (CPU surrogate when no AKD1000 is present) ─────────────────
 
-/// Minimal CPU-resident surrogate for multi-tenancy testing without hardware.
-/// Uses random projection (a valid mathematical stub for NP computation).
-struct SoftSystemBackend {
+/// Minimal CPU-resident surrogate for multi-tenancy testing when hardware is unavailable.
+///
+/// This is the intended **software fallback path**: same benchmark harness, no chip required.
+/// Uses random projection (a valid mathematical stand-in for NP computation).
+struct SoftwareBackend {
     spec: SystemSpec,
     // Random projection matrix: input_dim × output_dim
     w: Vec<f32>,
     rng: Xoshiro,
 }
 
-impl SoftSystemBackend {
+impl SoftwareBackend {
     fn new(spec: SystemSpec, seed: u64) -> Self {
         let mut rng = Xoshiro::new(seed);
         let w = (0..spec.input_dim * spec.output_dim)
@@ -196,7 +198,7 @@ struct SystemResult {
 
 // ── Core benchmark logic ──────────────────────────────────────────────────────
 
-fn bench_single_system(backend: &mut SoftSystemBackend, iters: usize) -> (f64, f64) {
+fn bench_single_system(backend: &mut SoftwareBackend, iters: usize) -> (f64, f64) {
     let input = {
         let mut rng = Xoshiro::new(42);
         rng.gen_vec(backend.spec.input_dim)
@@ -218,7 +220,7 @@ fn bench_single_system(backend: &mut SoftSystemBackend, iters: usize) -> (f64, f
     (hz, us)
 }
 
-fn bench_concurrent_systems(backends: &mut [SoftSystemBackend], iters: usize) -> f64 {
+fn bench_concurrent_systems(backends: &mut [SoftwareBackend], iters: usize) -> f64 {
     // Round-robin all systems: simulates concurrent dispatch
     let inputs: Vec<Vec<f32>> = backends
         .iter_mut()
@@ -279,7 +281,7 @@ fn main() -> Result<()> {
     let mut total_nps = 0usize;
 
     for (i, spec) in SYSTEMS.iter().enumerate() {
-        let mut backend = SoftSystemBackend::new(spec.clone(), i as u64 * 12345);
+        let mut backend = SoftwareBackend::new(spec.clone(), i as u64 * 12345);
         let (hz, us) = bench_single_system(&mut backend, iters);
         let vs_ref = hz / spec.expected_hz * 100.0;
 
@@ -331,10 +333,10 @@ fn main() -> Result<()> {
     println!();
     println!("── Phase 2: Concurrent Dispatch (Round-Robin) ───────────────────────");
 
-    let mut all_backends: Vec<SoftSystemBackend> = SYSTEMS
+    let mut all_backends: Vec<SoftwareBackend> = SYSTEMS
         .iter()
         .enumerate()
-        .map(|(i, spec)| SoftSystemBackend::new(spec.clone(), i as u64 * 99991))
+        .map(|(i, spec)| SoftwareBackend::new(spec.clone(), i as u64 * 99991))
         .collect();
 
     for n in [2usize, 4, 7] {
@@ -404,7 +406,7 @@ fn main() -> Result<()> {
     );
 
     // Simulate: one reservoir forward pass + 11 zero-cost SkipDMA heads
-    let mut reservoir = SoftSystemBackend::new(
+    let mut reservoir = SoftwareBackend::new(
         SystemSpec {
             name: "Reservoir",
             np_count: 179,

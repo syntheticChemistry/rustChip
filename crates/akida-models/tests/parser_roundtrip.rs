@@ -61,7 +61,7 @@ fn test_model_io_sizes_positive() {
 fn test_zoo_stub_round_trip() {
     let temp = tempfile::TempDir::new().unwrap();
     let mut zoo = ModelZoo::new(temp.path()).unwrap();
-    let path = zoo.create_stub_model(ZooModel::MinimalFc).unwrap();
+    let path = zoo.create_reference_model(ZooModel::MinimalFc).unwrap();
 
     assert!(path.exists());
 

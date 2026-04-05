@@ -59,6 +59,7 @@ crate-type = ["rlib"]
 # Cannot use `workspace = true` here: workspace forbids unsafe; this crate needs VFIO/mmap/DMA unsafe.
 [lints.rust]
 unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
 
 [lints.clippy]

@@ -4,6 +4,7 @@
 //!
 //! Provides utilities for downloading, converting, and managing
 //! models from the `BrainChip` Akida Model Zoo.
+//! References to hotSpring in model descriptions are ecosystem context — not a runtime dependency.
 //!
 //! ## Model Zoo Models
 //!
@@ -91,11 +92,11 @@ pub enum ZooModel {
     EcgAnomaly,
 
     // ── ecoPrimals physics — validated on real AKD1000 ──────────────────────
-    /// ESN readout for lattice QCD thermalization detection (hotSpring Exp 022)
+    /// ESN readout for lattice QCD thermalization detection (hotSpring Exp 022; ecosystem context — not a runtime dependency)
     EsnQcdThermalization,
-    /// Phase classifier: SU(3) confined/deconfined (hotSpring Exp 022)
+    /// Phase classifier: SU(3) confined/deconfined (hotSpring Exp 022; ecosystem context — not a runtime dependency)
     PhaseClassifierSu3,
-    /// WDM transport coefficient predictor — D*, η*, λ* (hotSpring Exp 022)
+    /// WDM transport coefficient predictor — D*, η*, λ* (hotSpring Exp 022; ecosystem context — not a runtime dependency)
     TransportPredictorWdm,
     /// Anderson localization regime classifier (groundSpring Exp 028)
     AndersonRegimeClassifier,
@@ -532,15 +533,16 @@ impl ModelZoo {
         &self.cache_dir
     }
 
-    /// Create a stub model for testing
+    /// Create a **reference** model artifact (minimal valid `.fbz`) for tooling and CI.
     ///
-    /// Creates a minimal .fbz file that passes format validation.
-    /// This is useful for testing without real models.
+    /// This is the fallback path when no hardware or pre-built zoo artifact is present: it writes
+    /// a minimal FlatBuffers payload that passes format validation so parsers and benches can run.
+    /// It is not a substitute for hardware-validated models in production.
     ///
     /// # Errors
     ///
     /// Returns error if file cannot be written.
-    pub fn create_stub_model(&mut self, model: ZooModel) -> Result<PathBuf> {
+    pub fn create_reference_model(&mut self, model: ZooModel) -> Result<PathBuf> {
         let path = self.cache_dir.join(model.filename());
 
         // Create minimal valid .fbz structure
@@ -569,10 +571,10 @@ impl ModelZoo {
         }
 
         fs::write(&path, &data)
-            .map_err(|e| AkidaModelError::loading_failed(format!("Cannot write stub: {e}")))?;
+            .map_err(|e| AkidaModelError::loading_failed(format!("Cannot write reference model: {e}")))?;
 
         info!(
-            "Created stub model: {} ({} bytes)",
+            "Created reference model: {} ({} bytes)",
             path.display(),
             data.len()
         );
@@ -584,17 +586,17 @@ impl ModelZoo {
         Ok(path)
     }
 
-    /// Initialize stub models for all `NeuroBench` benchmarks
+    /// Initialize reference models for all `NeuroBench` benchmarks (see [`Self::create_reference_model`]).
     ///
     /// # Errors
     ///
-    /// Returns error if any stub cannot be created.
+    /// Returns error if any reference artifact cannot be created.
     pub fn init_neurobench_stubs(&mut self) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for model in ZooModel::neurobench_models() {
             if !self.has_model(*model) {
-                let path = self.create_stub_model(*model)?;
+                let path = self.create_reference_model(*model)?;
                 paths.push(path);
             }
         }
@@ -745,11 +747,11 @@ mod tests {
     }
 
     #[test]
-    fn test_stub_model_creation() {
+    fn test_reference_model_creation() {
         let temp_dir = TempDir::new().unwrap();
         let mut zoo = ModelZoo::new(temp_dir.path()).unwrap();
 
-        let path = zoo.create_stub_model(ZooModel::DsCnnKws).unwrap();
+        let path = zoo.create_reference_model(ZooModel::DsCnnKws).unwrap();
 
         assert!(path.exists());
         assert!(zoo.has_model(ZooModel::DsCnnKws));

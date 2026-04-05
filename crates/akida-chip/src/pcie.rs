@@ -39,7 +39,7 @@ pub const OPTIMAL_BATCH_SIZE: usize = 8;
 
 /// Sustained DMA throughput measured on AKD1000 (MB/s).
 ///
-/// Source: wetSpring Exp 194, hotSpring Exp 022 (Feb 2026).
+/// Source: wetSpring Exp 194, hotSpring Exp 022 (Feb 2026; ecosystem context — not a runtime dependency).
 pub const MEASURED_DMA_THROUGHPUT_MB_S: u32 = 37;
 
 /// Format a `vendor:device` string for use with `lspci -d`.

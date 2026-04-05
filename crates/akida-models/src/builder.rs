@@ -193,7 +193,7 @@ impl Default for ProgramBuilder {
 
 /// Convenience builder for Echo State Network programs.
 ///
-/// Creates the standard ESN architecture used by hotSpring:
+/// Creates the standard ESN architecture used by hotSpring (ecosystem context — not a runtime dependency):
 /// `InputConv(input_dim) → FullyConnected(reservoir) → FullyConnected(output)`
 ///
 /// This is the program structure validated in Experiment 022 (5,978 live

@@ -2,6 +2,9 @@
 
 //! ESN Substrate Comparison Benchmark
 //!
+//! **Ecosystem context — not a runtime dependency:** File paths under hotSpring/barracuda name
+//! other repos for parity tracing; this benchmark does not depend on them at build time.
+//!
 //! Side-by-side comparison of Echo State Network inference across three substrates:
 //!
 //!   1. **CPU-f64**: Reference implementation. hotSpring-style f64 reservoir + f64 readout.
@@ -13,7 +16,7 @@
 //!   3. **Real AKD1000**: Actual hardware via VFIO driver. int4 weights, NPU arithmetic.
 //!      The production path. Int4 quantization introduces ~1–3% additional error vs f32.
 //!
-//! Ported and extended from:
+//! Ported and extended from (ecosystem context — not a runtime dependency):
 //!   hotSpring/barracuda/src/bin/validate_lattice_npu.rs   (NpuSimulator parity check)
 //!   hotSpring/barracuda/src/md/reservoir.rs               (EchoStateNetwork + NpuSimulator)
 //!

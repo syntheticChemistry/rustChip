@@ -119,7 +119,7 @@ fn run() -> akida_models::Result<()> {
     if let Some(model_name) = create_stub {
         let model = parse_model_name(&model_name)?;
         info!("Creating stub for {:?}...", model);
-        let path = zoo.create_stub_model(model)?;
+        let path = zoo.create_reference_model(model)?;
         println!("\n✓ Created stub: {}", path.display());
     }
 

@@ -5,12 +5,10 @@
 //! Page-aligned, mlock'd buffers with IOMMU DMA mapping for zero-copy
 //! data transfer between host and AKD1000.
 
-use super::ioctls;
+use super::ioctls::{self, ioctl_vfio_iommu_map_dma, ioctl_vfio_iommu_unmap_dma, VfioDmaMap, VfioDmaUnmap};
 use crate::error::{AkidaError, Result};
 use rustix::mm::{mlock, munlock};
 use std::os::unix::io::RawFd;
-
-use super::{VfioDmaMap, VfioDmaUnmap};
 
 /// DMA buffer for fast data transfer
 #[derive(Debug)]
@@ -72,30 +70,19 @@ impl DmaBuffer {
             dma_map.flags
         );
 
-        // SAFETY: VFIO_IOMMU_MAP_DMA ioctl necessary for DMA - kernel maps user buffer to IOVA.
+        // SAFETY: VFIO_IOMMU_MAP_DMA ioctl — kernel maps user buffer to IOVA.
         // Invariants: (1) container_fd valid from VFIO container open; (2) dma_map has argsz,
         // vaddr/iova/size from our allocation; (3) _IOW ioctl reads dma_map; (4) layout matches
         // kernel.
-        let ret = unsafe {
-            libc::ioctl(
-                container_fd,
-                ioctls::VFIO_IOMMU_MAP_DMA as _,
-                &raw const dma_map,
-            )
-        };
-
-        if ret < 0 {
-            let err = std::io::Error::last_os_error();
-            tracing::warn!("DMA map failed: {} (ret={})", err, ret);
+        if let Err(e) = ioctl_vfio_iommu_map_dma(container_fd, &dma_map) {
+            tracing::warn!("DMA map failed: {e}");
             // SAFETY: vaddr was allocated above with this exact layout and mlock'd
             // successfully, so munlock and dealloc are valid cleanup operations
             unsafe {
                 let _ = munlock(vaddr.cast(), size);
                 std::alloc::dealloc(vaddr, layout);
             };
-            return Err(AkidaError::transfer_failed(format!(
-                "Failed to map DMA: {err}"
-            )));
+            return Err(e);
         }
 
         tracing::debug!("Created DMA buffer: vaddr={vaddr:p}, iova={iova:#x}, size={size:#x}");
@@ -147,16 +134,10 @@ impl Drop for DmaBuffer {
             size: self.size as u64,
         };
 
-        // SAFETY: VFIO_IOMMU_UNMAP_DMA ioctl necessary - kernel unmaps IOVA before dealloc.
+        // SAFETY: VFIO_IOMMU_UNMAP_DMA — kernel unmaps IOVA before dealloc.
         // Invariants: (1) container_fd valid; (2) dma_unmap has iova/size from our mapping;
         // (3) layout matches kernel VfioDmaUnmap; (4) called before dealloc.
-        unsafe {
-            libc::ioctl(
-                self.container_fd,
-                ioctls::VFIO_IOMMU_UNMAP_DMA as _,
-                &raw const dma_unmap,
-            );
-        }
+        ioctl_vfio_iommu_unmap_dma(self.container_fd, &dma_unmap);
 
         // Layout is infallible here: size is from alloc in new(), 4096 is a power-of-two.
         // Allow in Drop because we cannot propagate errors.
@@ -174,9 +155,12 @@ impl Drop for DmaBuffer {
     }
 }
 
-// SAFETY: DmaBuffer owns its memory exclusively
+// SAFETY: `Send` — the allocation and VFIO DMA mapping are owned by this struct; `vaddr` is not
+// shared as a raw pointer elsewhere. Moving the struct to another thread does not invalidate the
+// kernel mapping or the locked pages (`mlock` applies to the address range in the process).
 unsafe impl Send for DmaBuffer {}
 
-// SAFETY: DmaBuffer provides exclusive access via &mut self for writes
-// Reads are safe from multiple threads (memory is owned)
+// SAFETY: `Sync` — concurrent `&` access only goes through `as_slice()` (immutable) or device DMA
+// with kernel-coherent semantics; mutation uses `&mut self` / exclusive slice. The IOMMU mapping
+// and buffer size are fixed for the lifetime of the value.
 unsafe impl Sync for DmaBuffer {}

@@ -19,7 +19,7 @@
 //! ## Origin
 //!
 //! Ported from `hotSpring::barracuda::md::reservoir::NpuSimulator` and
-//! `MultiHeadNpu`. The hotSpring version uses dynamic allocation; this version
+//! `MultiHeadNpu` (ecosystem context — not a runtime dependency). The hotSpring version uses dynamic allocation; this version
 //! is restructured to implement `NpuBackend` and matches `ExportedWeights` format.
 //!
 //! ## Precision model
@@ -121,7 +121,7 @@ impl SoftwareBackend {
         Self::new(50, 8, 1)
     }
 
-    /// Set the leak rate (default 0.3, matches hotSpring default).
+    /// Set the leak rate (default 0.3, matches hotSpring default; ecosystem context — not a runtime dependency).
     pub fn with_leak_rate(mut self, alpha: f32) -> Self {
         self.leak_rate = alpha;
         self
