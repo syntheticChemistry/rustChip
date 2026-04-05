@@ -3,7 +3,7 @@
 Pure Rust software stack for BrainChip Akida neuromorphic processors (AKD1000, AKD1500).
 
 Forked from [Brainchip-Inc/akida_dw_edma](https://github.com/Brainchip-Inc/akida_dw_edma).
-C kernel module → deprecated (see [DEPRECATED.md](DEPRECATED.md)).
+C kernel module → deprecated (see [docs/DEPRECATED.md](docs/DEPRECATED.md)).
 All active development is in the crates and directories below.
 
 No Python. No C++ SDK. No MetaTF. No kernel module required.
@@ -92,9 +92,13 @@ rustChip/
 │       └── README.md           outreach index
 │
 ├── docs/                       Stable docs (also accessible from whitePaper/outreach/)
-├── BEYOND_SDK.md               the most important document — read first
+│   ├── BEYOND_SDK.md           the most important document — read first
+│   ├── DEPRECATED.md           migration guide from C kernel module
+│   └── PR_DESCRIPTION.md       historical PR description (archived)
 ├── CHANGELOG.md                change history
-└── DEPRECATED.md               migration guide from C kernel module
+├── install.sh                  legacy: build/install akida-pcie.ko (see Development)
+├── build_kernel_w_cma.sh       legacy: custom kernel with CMA for AKD1500 (see Development)
+└── Makefile                    legacy kernel-module build (see Development)
 ```
 
 ---
@@ -128,6 +132,22 @@ cargo run --bin bench_exp002_tenancy # multi-tenancy: 7-system NP packing (Phase
 cargo run --bin bench_exp002_tenancy -- --hw  # Phase 2: SRAM isolation verification
 cargo run --bin bench_exp004_hybrid_tanh  # hybrid tanh: Approach B validation
 ```
+
+---
+
+## Development
+
+Day-to-day work uses **Cargo** only: `cargo build`, `cargo test`, `cargo clippy`, and `cargo run --bin …` for benchmarks and `akida`.
+
+The root **Makefile**, **install.sh**, and **build_kernel_w_cma.sh** are **legacy paths** for the deprecated C kernel module and special kernels:
+
+| Script | When to use |
+|--------|-------------|
+| **Makefile** | Building the out-of-tree `akida-pcie.ko` module against your running kernel — only if you need `/dev/akida*` fallback instead of VFIO. |
+| **install.sh** | Builds the module via `make`, copies `akida-pcie.ko` into `/lib/modules/…`, updates `/etc/modules`, and sets udev rules — full install of that fallback path (requires root). |
+| **build_kernel_w_cma.sh** | Building a **custom Linux kernel** with CMA enabled for AKD1500-style setups when your distro kernel lacks `CONFIG_CMA=y` — rare; most developers skip this. |
+
+For the primary VFIO-based stack, none of these are required.
 
 ---
 
@@ -206,7 +226,7 @@ let data = backend.read_sram(offset, length)?;            // raw SRAM read
 
 ## The 10 hardware discoveries
 
-Full details in [`BEYOND_SDK.md`](BEYOND_SDK.md).
+Full details in [`docs/BEYOND_SDK.md`](docs/BEYOND_SDK.md).
 
 | # | SDK claim | Actual hardware |
 |---|-----------|-----------------|
@@ -296,7 +316,7 @@ The full technical writeup is in [`whitePaper/outreach/akida/TECHNICAL_BRIEF.md`
 ## For BrainChip engineers
 
 Start here:
-1. [`BEYOND_SDK.md`](BEYOND_SDK.md) — the 10 discoveries
+1. [`docs/BEYOND_SDK.md`](docs/BEYOND_SDK.md) — the 10 discoveries
 2. [`whitePaper/outreach/akida/TECHNICAL_BRIEF.md`](whitePaper/outreach/akida/TECHNICAL_BRIEF.md) — what the hardware actually does
 3. [`baseCamp/systems/README.md`](baseCamp/systems/README.md) — what more it can do
 4. [`whitePaper/explorations/TANH_CONSTRAINT.md`](whitePaper/explorations/TANH_CONSTRAINT.md) — the one thing to fix in hardware

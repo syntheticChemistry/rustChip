@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * DEPRECATED — see DEPRECATED.md
+ * DEPRECATED — see docs/DEPRECATED.md
  *
  * This file is the original BrainChip C PCIe driver, preserved for reference.
  * All active development has moved to the pure Rust stack in rust/ (crates/).

@@ -20,7 +20,7 @@
 | akida-bench | ✅ 12 bins | 10 BEYOND_SDK + probe_sram + Phase 2 benchmarks |
 | akida-cli | ✅ Functional | enumerate, info, bind-vfio, unbind-vfio, iommu-group |
 | docs/ | ✅ Complete | BEYOND_SDK, HARDWARE, TECHNICAL_BRIEF, BENCHMARK_DATASHEET |
-| DEPRECATED.md | ✅ | C kernel module clearly marked, migration path documented |
+| `docs/DEPRECATED.md` | ✅ | C kernel module clearly marked, migration path documented |
 
 ---
 
@@ -99,7 +99,7 @@ for upstream reference. We don't erase history; we evolve past it.
 **Engineer evaluating this for integration**:
 1. This README (5 min)
 2. `INTEGRATION_GUIDE.md` — how to use this in your project (incl. SRAM access)
-3. `../BEYOND_SDK.md` — the 10 hardware discoveries that justify the approach
+3. `../docs/BEYOND_SDK.md` — the 10 hardware discoveries that justify the approach
 
 **Researcher studying the silicon**:
 1. `SILICON_SPEC.md` — register map, NP mesh, SRAM types

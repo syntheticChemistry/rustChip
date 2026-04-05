@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] — 2026-04-05
+
+### Changed (Grade A Sprint)
+- Clippy: 828 → 0 warnings (workspace cast allows, source fixes)
+- Tests: 0 → 237 test functions across all 5 crates
+- Coverage: 60.8% (software-testable; hardware VFIO/mmap excluded)
+- 31 unsafe blocks documented with // SAFETY: comments
+- deny(unsafe_op_in_unsafe_fn) enforced
+- Refactored: vfio split (ioctls.rs, container.rs), hybrid split (software.rs)
+- Mock evolution: create_stub_model → create_reference_model, SoftSystemBackend → SoftwareBackend
+- tarpaulin.toml with fail-under=60.0 and hardware excludes
+
+---
+
 ## [Unreleased] — SRAM access + deep-debt evolution (Mar 2026)
 
 ### Key additions
@@ -193,11 +207,11 @@
 - `akida iommu-group <addr>` — show IOMMU group and /dev/vfio path
 
 **Docs**
-- `BEYOND_SDK.md` (root + `docs/`) — 10 hardware discoveries, raw measurements
+- `docs/BEYOND_SDK.md` — 10 hardware discoveries, raw measurements
 - `docs/HARDWARE.md` — NP mesh architecture, BAR layout, per-NP capabilities
 - `docs/TECHNICAL_BRIEF.md` — production use in lattice QCD (Exp 022)
 - `docs/BENCHMARK_DATASHEET.md` — complete measurement dataset
-- `DEPRECATED.md` — migration guide from C kernel module to Rust VFIO path
+- `docs/DEPRECATED.md` — migration guide from C kernel module to Rust VFIO path
 
 ### Changed
 

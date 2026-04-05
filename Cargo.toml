@@ -12,9 +12,9 @@ members = [
 version      = "0.1.0"
 edition      = "2024"
 license      = "AGPL-3.0-or-later"
-repository   = "https://github.com/ecoPrimal/rustChip"
+repository   = "https://github.com/syntheticChemistry/rustChip"
 authors      = ["ecoPrimal <ecoPrimal@pm.me>"]
-homepage     = "https://github.com/ecoPrimal/rustChip"
+homepage     = "https://github.com/syntheticChemistry/rustChip"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
