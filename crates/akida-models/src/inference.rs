@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn input_output_sizes_remain_positive_for_minimal_parseable_buffer() {
         let mut data = vec![0u8; 64];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
 
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn io_shapes_heuristic_caps_input_estimate_at_1024_for_large_program() {
         let mut data = vec![0u8; 2048];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
         // Weight heuristic pattern so total_weight_count() > 0
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn io_shapes_output_matches_layer_count_heuristic() {
         let mut data = vec![0u8; 700];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
         // Length-prefixed layer name so `extract_layer_names` yields at least one layer

@@ -83,7 +83,10 @@ impl Model {
         Self::from_bytes(&data)
     }
 
-    /// Parse model from bytes
+    /// Parse model from bytes.
+    ///
+    /// Accepts both Snappy-compressed `.fbz` files (model zoo) and raw
+    /// FlatBuffer data (hand-built test models).
     ///
     /// # Errors
     ///
@@ -91,14 +94,17 @@ impl Model {
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         tracing::debug!("Parsing model ({} bytes)", data.len());
 
-        // Parse header
+        // Parse header (handles Snappy decompression internally)
         let header = parser::parse_header(data)?;
 
         tracing::info!("Model version: {}", header.version);
         tracing::debug!("Layer count: {}", header.layer_count);
 
-        // Extract layer names
-        let layer_names = parser::extract_layer_names(data);
+        // Decompress for layer/weight extraction if needed
+        let (payload, _compressed) = parser::decompress_fbz(data)?;
+
+        // Extract layer names from the decompressed payload
+        let layer_names = parser::extract_layer_names(&payload);
 
         // Create layers from extracted names
         //
@@ -135,15 +141,15 @@ impl Model {
             })
             .collect();
 
-        // Extract weight data
-        let weights = extract_weights(data)?;
+        // Extract weight data from decompressed payload
+        let weights = extract_weights(&payload)?;
         tracing::debug!("Found {} weight block(s)", weights.len());
 
         Ok(Self {
             version: header.version,
             layers,
             weights,
-            data: data.to_vec(),
+            data: payload,
         })
     }
 
@@ -238,7 +244,7 @@ mod tests {
     #[test]
     fn from_bytes_preserves_raw_data_len() {
         let mut data = vec![0u8; 128];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
 
@@ -251,7 +257,7 @@ mod tests {
     #[test]
     fn model_clone_round_trips_len() {
         let mut data = vec![0u8; 96];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
 
@@ -289,7 +295,7 @@ mod tests {
     #[test]
     fn total_weight_count_sums_blocks() {
         let mut data = vec![0u8; 256];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
         let model = Model::from_bytes(&data).unwrap();

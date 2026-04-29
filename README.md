@@ -12,9 +12,23 @@ No Python. No C++ SDK. No MetaTF. No kernel module required.
 
 ## What this is
 
-A fruiting body from the [ecoPrimals](https://github.com/ecoPrimals) project —
-self-contained, carries everything it needs to replicate, designed to be handed
-to the BrainChip engineering team as a complete, standalone working system.
+A standalone fruiting body from the [ecoPrimals](https://github.com/ecoPrimals)
+ecosystem — self-contained, carries everything it needs to replicate, designed
+for anyone who wants to explore what the Akida hardware can actually do.
+
+**Ecosystem context:**
+
+| Organization | Role | Link |
+|---|---|---|
+| [ecoPrimals](https://github.com/ecoPrimals) | Infrastructure primals (compute, crypto, networking, storage) | [primals.eco](https://primals.eco) |
+| [syntheticChemistry](https://github.com/syntheticChemistry) | Science validation (8 springs across physics, biology, agriculture, health) | [primals.eco/springs](https://primals.eco/springs/) |
+| [sporeGarden](https://github.com/sporeGarden) | Products (esotericWebb, helixVision, blueFish) | [primals.eco](https://primals.eco) |
+
+rustChip mirrors the NPU subset of [toadStool](https://github.com/ecoPrimals/toadStool)
+(the sovereign compute hardware primal) as a standalone exploration. toadStool contains
+the full heterogeneous compute stack (GPU/NPU/CPU discovery, tolerance-based routing,
+20K+ tests); rustChip extracts the Akida-specific crates into an independent repo that
+others can clone, build, and use without the wider ecoPrimals workspace.
 
 It emerged from `toadStool` and `hotSpring`, the shared compute library and physics
 simulation suites behind five scientific validation runs (lattice QCD, microbial
@@ -334,3 +348,8 @@ Want to read/write all on-chip memory? Start here:
 
 AGPL-3.0-or-later.
 The original C kernel module files at the repository root are GPL-2.0 (BrainChip Inc.).
+
+---
+
+Part of [ecoPrimals](https://github.com/ecoPrimals) — sovereign compute for science and human dignity.
+Website: [primals.eco](https://primals.eco)

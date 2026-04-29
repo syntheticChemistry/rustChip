@@ -202,11 +202,17 @@ Reverse-engineered from `.fbz` model files and `program_external()` call analysi
 See `../docs/BEYOND_SDK.md` Discovery 7 and 9 for methodology.
 
 ```
-.fbz file structure:
-  [4 bytes]  magic "AKIDA" (not standard FlatBuffer)
-  [N bytes]  Snappy-compressed payload
-    → decompressed: FlatBuffer binary
+.fbz file structure (corrected — see syntheticChemistry/rustChip#1):
+  [varint]   Snappy uncompressed-size (1–5 bytes, no fixed magic)
+  [N bytes]  Snappy block-compressed payload
+    → decompressed: standard FlatBuffer binary
+      → bytes [0..4]: root table offset (u32 LE)
+      → version string at variable offset (observed: 33-35)
       → root table → program_info + program_data
+
+  NOTE: earlier documentation claimed a fixed "AKIDA" magic at offset 0.
+  Testing against the full Akida model zoo (v1 + v2) confirmed there are
+  no fixed magic bytes. The first bytes are the Snappy varint.
 
 program_info  (~332 bytes for minimal ESN model):
   NP routing: which NPs execute which layers

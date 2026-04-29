@@ -73,6 +73,13 @@ pub enum AkidaError {
         /// Reason for failure
         reason: String,
     },
+
+    /// Setup or configuration error (permissions, VFIO binding, module loading)
+    #[error("Setup failed: {reason}")]
+    SetupFailed {
+        /// Reason for failure
+        reason: String,
+    },
 }
 
 impl AkidaError {
@@ -105,6 +112,13 @@ impl AkidaError {
     /// Create a hardware error
     pub fn hardware_error(reason: impl Into<String>) -> Self {
         Self::HardwareError {
+            reason: reason.into(),
+        }
+    }
+
+    /// Create a setup failed error
+    pub fn setup_failed(reason: impl Into<String>) -> Self {
+        Self::SetupFailed {
             reason: reason.into(),
         }
     }
@@ -152,6 +166,11 @@ mod tests {
             AkidaError::hardware_error("dmesg")
                 .to_string()
                 .contains("dmesg")
+        );
+        assert!(
+            AkidaError::setup_failed("vfio bind")
+                .to_string()
+                .contains("vfio bind")
         );
         let io = std::io::Error::new(std::io::ErrorKind::NotFound, "x");
         assert!(AkidaError::from(io).to_string().contains("I/O"));

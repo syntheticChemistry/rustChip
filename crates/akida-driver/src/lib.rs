@@ -71,6 +71,7 @@ pub mod puf;
 pub mod sentinel;
 pub mod setup;
 pub mod sram;
+mod synthetic;
 pub mod tenancy;
 pub mod vfio;
 
@@ -101,6 +102,9 @@ pub use hybrid::{
 pub use inference::{InferenceConfig, InferenceExecutor, InferenceResult};
 pub use loading::{LoadConfig, LoadMetrics, ModelLoader, ModelProgram, NpuConfig};
 pub use vfio::VfioBackend;
+
+#[cfg(any(test, feature = "test-mocks"))]
+pub use synthetic::SyntheticNpuBackend;
 
 /// Commonly used types.
 pub mod prelude {

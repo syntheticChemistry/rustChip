@@ -18,8 +18,8 @@ pub enum AkidaModelError {
         path: PathBuf,
     },
 
-    /// Invalid `FlatBuffers` magic bytes
-    #[error("Invalid FlatBuffers header: expected magic bytes \\x80D\\x04\\x10")]
+    /// Invalid file format (not a Snappy-compressed FlatBuffer or legacy test model)
+    #[error("Invalid model header: not a recognized .fbz (Snappy + FlatBuffer) or raw FlatBuffer")]
     InvalidHeader,
 
     /// Unsupported model version
@@ -99,8 +99,8 @@ mod tests {
     }
 
     #[test]
-    fn invalid_header_display_mentions_magic() {
+    fn invalid_header_display_mentions_format() {
         let e = AkidaModelError::InvalidHeader;
-        assert!(e.to_string().contains("magic"));
+        assert!(e.to_string().contains("header"));
     }
 }

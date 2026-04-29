@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+#![allow(unsafe_code, reason = "MMIO requires volatile reads/writes to hardware registers")]
+
 //! Memory-Mapped I/O for Akida NPU
 //!
 //! Provides safe abstractions for accessing Akida hardware registers.

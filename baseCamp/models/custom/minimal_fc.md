@@ -84,11 +84,13 @@ The FlatBuffer layout was reverse-engineered from:
 3. `crates/akida-chip/src/program.rs` — the confirmed Rust model
 
 Key findings:
-- Magic bytes: `08 00 00 00` at offset 0 (FlatBuffer standard)
-- Version string at offset 8: null-terminated UTF-8
+- `.fbz` files are Snappy-compressed; the first bytes are a varint (no fixed magic)
+- After decompression: standard FlatBuffer — bytes [0..4] are root table offset (u32 LE)
+- Version string at variable offset in decompressed data (observed: 33-35 across models)
 - Layer table at variable offset (table pointer at offset 4)
 - Weight layout: int4 packed 2-per-byte, row-major order
 - Threshold encoding: int4, same packing as weights
+- Note: hand-built test models from `ProgramBuilder` may use raw FlatBuffer (no Snappy)
 
 ---
 

@@ -9,13 +9,18 @@
 //!
 //! # Format
 //!
-//! Akida models are stored in `FlatBuffers` binary format with the following structure:
+//! Akida `.fbz` files are **Snappy-compressed FlatBuffers**:
 //!
-//! - **Header** (16 bytes): `FlatBuffers` magic and table offsets
-//! - **Version**: SDK version string (e.g., "2.18.2")
-//! - **Metadata**: Model configuration and layer information
-//! - **Layers**: Array of layer definitions
-//! - **Weights**: Quantized weight data
+//! - **Outer layer**: Snappy block format (first bytes are a varint encoding
+//!   the uncompressed payload size)
+//! - **Inner layer**: Standard FlatBuffer binary
+//!   - Bytes `[0..4]`: root table offset (u32 LE)
+//!   - Version string (e.g., "2.19.1") at variable offset (observed: 33-35)
+//!   - Layer definitions and metadata
+//!   - Quantized weight data
+//!
+//! The parser also accepts raw (uncompressed) FlatBuffer data for hand-built
+//! test models produced by `ProgramBuilder`.
 //!
 //! # Example
 //!

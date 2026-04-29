@@ -46,6 +46,10 @@ enum Cmd {
         /// `PCIe` address (e.g. 0000:a1:00.0).
         pcie_addr: String,
     },
+    /// Run full NPU setup: discover hardware, load module, enable PCIe, set permissions.
+    Setup,
+    /// Verify that Akida hardware is accessible and ready.
+    Verify,
 }
 
 fn main() -> Result<()> {
@@ -61,6 +65,8 @@ fn main() -> Result<()> {
         Cmd::BindVfio { pcie_addr } => cmd_bind_vfio(&pcie_addr)?,
         Cmd::UnbindVfio { pcie_addr } => cmd_unbind_vfio(&pcie_addr)?,
         Cmd::IommuGroup { pcie_addr } => cmd_iommu_group(&pcie_addr)?,
+        Cmd::Setup => cmd_setup()?,
+        Cmd::Verify => cmd_verify()?,
     }
 
     Ok(())
@@ -198,5 +204,106 @@ fn cmd_iommu_group(pcie_addr: &str) -> Result<()> {
     let group = akida_driver::vfio::iommu_group(pcie_addr)?;
     println!("IOMMU group for {pcie_addr}: {group}");
     println!("Device file: /dev/vfio/{group}");
+    Ok(())
+}
+
+fn cmd_setup() -> Result<()> {
+    println!("Akida NPU Setup");
+    println!("================");
+    let mut setup = akida_driver::setup::NpuSetup::new();
+    setup.run().map_err(|e| anyhow::anyhow!("Setup failed: {e}"))?;
+    println!("\nSetup complete. Run `akida verify` to confirm.");
+    Ok(())
+}
+
+fn cmd_verify() -> Result<()> {
+    println!("Akida NPU Verification");
+    println!("======================\n");
+
+    let mut all_ok = true;
+
+    // 1. PCIe device discovery
+    print!("PCIe discovery ... ");
+    match akida_driver::DeviceManager::discover() {
+        Ok(mgr) if mgr.device_count() > 0 => {
+            println!("OK ({} device(s))", mgr.device_count());
+            for info in mgr.devices() {
+                let c = info.capabilities();
+                println!(
+                    "  [{:?}] {} — {} NPs, {} MB SRAM",
+                    c.chip_version,
+                    info.pcie_address(),
+                    c.npu_count,
+                    c.memory_mb
+                );
+                // IOMMU group
+                match akida_driver::vfio::iommu_group(info.pcie_address()) {
+                    Ok(g) => {
+                        let vfio_dev = format!("/dev/vfio/{g}");
+                        let accessible =
+                            std::fs::metadata(&vfio_dev).map(|m| !m.permissions().readonly());
+                        println!(
+                            "  IOMMU group {g} — {}",
+                            if accessible.unwrap_or(false) {
+                                "accessible"
+                            } else {
+                                "NOT accessible (run: sudo chown $USER /dev/vfio/<group>)"
+                            }
+                        );
+                    }
+                    Err(_) => println!("  IOMMU — not available"),
+                }
+            }
+        }
+        Ok(_) => {
+            println!("WARN — no devices found");
+            all_ok = false;
+        }
+        Err(e) => {
+            println!("FAIL — {e}");
+            all_ok = false;
+        }
+    }
+
+    // 2. Kernel module
+    print!("Kernel module   ... ");
+    match std::process::Command::new("lsmod").output() {
+        Ok(output) => {
+            let modules = String::from_utf8_lossy(&output.stdout);
+            if modules.contains("akida_pcie") {
+                println!("loaded");
+            } else {
+                println!("not loaded (optional — VFIO path does not need it)");
+            }
+        }
+        Err(_) => println!("could not run lsmod"),
+    }
+
+    // 3. Device nodes
+    print!("Device nodes    ... ");
+    let dev_path = std::path::Path::new("/dev/akida0");
+    if dev_path.exists() {
+        println!("present ({})", dev_path.display());
+    } else {
+        println!("absent (normal if using VFIO path)");
+    }
+
+    // 4. VFIO container
+    print!("VFIO container  ... ");
+    let vfio_path = std::path::Path::new("/dev/vfio/vfio");
+    if vfio_path.exists() {
+        println!("present");
+    } else {
+        println!("MISSING — load vfio-pci module");
+        all_ok = false;
+    }
+
+    println!();
+    if all_ok {
+        println!("All checks passed. Hardware is ready.");
+    } else {
+        println!("Some checks failed. Run `akida setup` or see docs/SETUP.md.");
+    }
+
     Ok(())
 }

@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn model_from_bytes_yields_non_empty_program_payload() {
         let mut data = vec![0u8; 600];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
 
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn model_program_checksum_matches_byte_sum_of_payload() {
         let mut data = vec![0u8; 200];
-        data[0..4].copy_from_slice(&crate::parser::FLATBUFFERS_MAGIC);
+        data[0..4].copy_from_slice(&crate::parser::LEGACY_TEST_MAGIC);
         let ver = b"2.18.2\0";
         data[30..30 + ver.len()].copy_from_slice(ver);
         data[100] = 7;

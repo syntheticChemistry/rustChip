@@ -32,6 +32,8 @@ default  = []
 async    = ["dep:tokio"]
 # Enable when C kernel module is installed; otherwise VFIO is the primary path
 kernel   = []
+# Expose SyntheticNpuBackend — a minimal always-ready mock for integration tests
+test-mocks = []
 
 [[example]]
 name = "enumerate_devices"
@@ -56,10 +58,10 @@ path = "tests/backend_parity.rs"
 [lib]
 crate-type = ["rlib"]
 
-# Cannot use `workspace = true` here: workspace forbids unsafe; this crate needs VFIO/mmap/DMA unsafe.
-# Clippy settings mirror the workspace; cast allows match root `Cargo.toml` (numeric-heavy driver code).
+# Cannot use `workspace = true` here: workspace forbids unsafe; this crate needs targeted unsafe in
+# VFIO/mmap/DMA modules. Deny at crate level, allow only on modules that require it.
 [lints.rust]
-unsafe_code = "allow"
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"
 dead_code = "allow"

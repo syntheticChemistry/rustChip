@@ -53,10 +53,12 @@ pub mod typical_sizes {
     pub const TOTAL_BYTES: usize = PROGRAM_INFO_BYTES + PROGRAM_DATA_BYTES;
 }
 
-/// `.fbz` file format (`FlatBuffer` + Snappy compression).
+/// `.fbz` file format (Snappy-compressed FlatBuffer).
+///
+/// Real `.fbz` files from the model zoo have no fixed magic bytes. The first
+/// bytes are a Snappy varint encoding the uncompressed payload size.
+/// After decompression the payload is a standard FlatBuffer binary.
 pub mod fbz {
-    /// Magic bytes identifying a `.fbz` file.
-    pub const MAGIC: &[u8] = b"AKIDA";
     /// Compression algorithm used.
     pub const COMPRESSION: &str = "snappy";
     /// Extension.
@@ -128,7 +130,6 @@ mod tests {
 
     #[test]
     fn fbz_file_constants() {
-        assert_eq!(fbz::MAGIC, b"AKIDA");
         assert_eq!(fbz::EXTENSION, ".fbz");
         assert_eq!(fbz::COMPRESSION, "snappy");
     }
