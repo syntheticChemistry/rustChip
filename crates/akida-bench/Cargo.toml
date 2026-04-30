@@ -12,6 +12,8 @@ authors.workspace    = true
 [dependencies]
 akida-driver = { workspace = true }
 akida-chip   = { workspace = true }
+akida-models = { workspace = true }
+onnx-rs      = { workspace = true }
 anyhow       = { workspace = true }
 tracing      = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -95,6 +97,94 @@ path = "src/bin/run_experiments.rs"
 [[bin]]
 name = "probe_sram"              # SRAM probe: direct memory read/write for all NP SRAM
 path = "src/bin/probe_sram.rs"
+
+[[bin]]
+name = "probe_vfio"              # VFIO probe: userspace BAR access (no kernel driver)
+path = "src/bin/probe_vfio.rs"
+
+# ── Wildlife Preserve domain demos ────────────────────────────────────────────
+[[bin]]
+name = "preserve_physics"
+path = "src/bin/preserve_physics.rs"
+
+[[bin]]
+name = "preserve_audio"
+path = "src/bin/preserve_audio.rs"
+
+[[bin]]
+name = "preserve_vision"
+path = "src/bin/preserve_vision.rs"
+
+[[bin]]
+name = "preserve_environmental"
+path = "src/bin/preserve_environmental.rs"
+
+[[bin]]
+name = "preserve_genomic"
+path = "src/bin/preserve_genomic.rs"
+
+[[bin]]
+name = "preserve_industrial"
+path = "src/bin/preserve_industrial.rs"
+
+[[bin]]
+name = "preserve_biology"
+path = "src/bin/preserve_biology.rs"
+
+# ── NeuroBench benchmarks ─────────────────────────────────────────────────────
+[[bin]]
+name = "neurobench_kws"
+path = "src/bin/neurobench_kws.rs"
+
+[[bin]]
+name = "neurobench_dvs_gesture"
+path = "src/bin/neurobench_dvs_gesture.rs"
+
+[[bin]]
+name = "test_snntorch_bridge"       # SNNTorch/PyTorch → rustChip conversion test
+path = "src/bin/test_snntorch_bridge.rs"
+
+# ── Live hardware + comparison binaries ──────────────────────────────────
+[[bin]]
+name = "hw_live_inference"          # End-to-end VFIO inference on real silicon
+path = "src/bin/hw_live_inference.rs"
+
+[[bin]]
+name = "hw_vs_sw_npu"              # Hardware NPU vs Software NPU side-by-side
+path = "src/bin/hw_vs_sw_npu.rs"
+
+[[bin]]
+name = "ensemble_npu"              # Multi-backend cooperative ensemble inference
+path = "src/bin/ensemble_npu.rs"
+
+[[bin]]
+name = "probe_registers"           # BAR0 register map discovery
+path = "src/bin/probe_registers.rs"
+
+[[bin]]
+name = "warm_boot_akida"           # Ember-pattern warm boot: akida_pcie → vfio-pci
+path = "src/bin/warm_boot_akida.rs"
+
+# ── Standalone science demos (self-contained, derivative of springs) ─────
+[[bin]]
+name = "science_lattice_esn"       # Physics: hybrid ESN steering (hotSpring lineage)
+path = "src/bin/science_lattice_esn.rs"
+
+[[bin]]
+name = "science_bloom_sentinel"    # Biology: streaming bloom detection (wetSpring lineage)
+path = "src/bin/science_bloom_sentinel.rs"
+
+[[bin]]
+name = "science_spectral_triage"   # Chemistry: LC-MS gatekeeper (wetSpring lineage)
+path = "src/bin/science_spectral_triage.rs"
+
+[[bin]]
+name = "science_crop_classifier"   # Agriculture: edge NPU + (1+1)-ES (airSpring lineage)
+path = "src/bin/science_crop_classifier.rs"
+
+[[bin]]
+name = "science_precision_ladder"  # Cross-domain: quantization as methodology
+path = "src/bin/science_precision_ladder.rs"
 
 [lints]
 workspace = true

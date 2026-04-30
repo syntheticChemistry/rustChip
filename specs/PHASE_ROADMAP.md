@@ -15,7 +15,7 @@ sovereign Rust access — from Python wrapper to Rust kernel module.
 Phase A: Python SDK → Rust FFI wrapper       [external, not in this repo]
 Phase B: C++ Engine → Rust FFI (libakida.so) [external, not in this repo]
 Phase C: Direct ioctl/mmap on /dev/akida0    ✅ complete (Feb 26, 2026)
-Phase D: Pure Rust VFIO driver               ✅ active (SRAM access complete)
+Phase D: Pure Rust VFIO driver               ✅ active (D.7 glowplug + science showcase)
 Phase E: Rust akida_pcie kernel module        🔲 queued
 ```
 
@@ -94,13 +94,42 @@ No kernel module in the data path. Pure Rust from `open("/dev/vfio/N")` onward.
 - `probe_sram` binary: 3-mode SRAM diagnostic tool
 - `bench_exp002_tenancy --hw`: Phase 2 SRAM isolation verification
 
+**Phase D.6 — toadStool hardening port (April 29, 2026)**:
+- FBZ parser rewrite: Snappy decompression via `snap` crate — `.fbz` files
+  have no fixed magic bytes, first bytes are a Snappy varint. Legacy test
+  magic (`LEGACY_TEST_MAGIC`) retained for `ProgramBuilder` test models.
+  Reconciled 3 conflicting format docs. Removed stale `fbz::MAGIC = b"AKIDA"`.
+- `SetupFailed` error variant ported from toadStool → `AkidaError`
+- Unsafe policy: crate-level `deny(unsafe_code)` with targeted allows on
+  5 modules (ioctls, dma, container, mmio, mmap)
+- `SyntheticNpuBackend`: minimal deterministic NPU mock behind `test-mocks`
+  feature flag, ported from toadStool's `synthetic.rs`
+- CLI `setup` command: full NPU setup (discover, load module, PCIe, permissions)
+- CLI `verify` command: check PCIe, kernel module, device nodes, VFIO container
+- README + docs: ecosystem table, primals.eco links, toadStool relationship
+
+**Phase D.7 — glowplug absorption + science showcase (April 30, 2026)**:
+- glowplug VFIO lifecycle absorbed from coralReef's ember/glowplug —
+  sovereign warm boot without external orchestrator
+- HW/SW backend separation: `VfioBackend` [HW] / `SoftwareBackend` [SW]
+  explicit and never conflated; `BackendSelection` enum + `select_backend()`
+- 4 narrative explorations in `whitePaper/explorations/`
+- 5 standalone science demo binaries reproducing peer-reviewed NPU claims
+- `warm_boot` binary demonstrating sovereign device lifecycle
+- Experiment 006: BAR0 Register Probe (80 NPs, 10 MB SRAM confirmed)
+- scyBorg licensing: AGPL-3.0-or-later + ORC + CC-BY-SA 4.0; lineage principle
+
 **Setup**: One-time per machine (IOMMU enable + vfio-pci bind). After that:
 no root, no kernel module, no Python.
 
-**Known gaps**:
+**Known gaps** (remaining Phase D work):
 - IRQ-based completion (currently polling) — `VFIO_DEVICE_SET_IRQS` ready to use
 - Scatter-gather DMA for large payloads
 - MSI-X interrupt vectors
+- Full FBZ schema reverse-engineering (parser uses heuristic scanning)
+- Reservoir research patterns from toadStool (ensemble, readout, state extraction)
+- Cross-substrate validation consolidation
+- `NpuBackendDispatch` enum dispatch (currently `Box<dyn NpuBackend>`)
 
 ---
 
@@ -133,7 +162,7 @@ use kernel::pci::{self, Device as PciDevice};
 module! {
     type: AkidaDriver,
     name: "akida_pcie_rs",
-    author: "ecoPrimal",
+    author: "ecoPrimals",
     license: "GPL v2",
 }
 

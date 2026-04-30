@@ -9,18 +9,26 @@
 //!
 //! # Format
 //!
-//! Akida `.fbz` files are **Snappy-compressed FlatBuffers**:
+//! Akida `.fbz` files are **Snappy-compressed FlatBuffers with zero-padding**:
 //!
-//! - **Outer layer**: Snappy block format (first bytes are a varint encoding
-//!   the uncompressed payload size)
-//! - **Inner layer**: Standard FlatBuffer binary
-//!   - Bytes `[0..4]`: root table offset (u32 LE)
-//!   - Version string (e.g., "2.19.1") at variable offset (observed: 33-35)
-//!   - Layer definitions and metadata
-//!   - Quantized weight data
+//! ```text
+//! [varint: uncompressed_size] [snappy_chunks] [zero_padding]
+//! ```
 //!
-//! The parser also accepts raw (uncompressed) FlatBuffer data for hand-built
-//! test models produced by `ProgramBuilder`.
+//! - **Varint**: standard Snappy/LEB128 varint encoding the uncompressed
+//!   FlatBuffer size (1–5 bytes)
+//! - **Snappy chunks**: compressed FlatBuffer data in Snappy raw/block format
+//! - **Zero-padding**: trailing zero bytes to an alignment boundary (BrainChip
+//!   SDK artifact). These must be stripped before decompression since `0x00`
+//!   is a valid 1-byte Snappy literal that would overflow the output buffer.
+//!
+//! After decompression, the payload is a standard FlatBuffer binary:
+//! - Bytes `[0..4]`: root table offset (u32 LE, typically 0x10)
+//! - Version string (e.g., "2.18.2") via vtable traversal
+//! - Layer definitions, metadata, and quantized weight data
+//!
+//! Validated against the full BrainChip model zoo (v1 + v2) and hand-built
+//! test models from `ProgramBuilder`.
 //!
 //! # Example
 //!
@@ -44,12 +52,17 @@
 
 pub mod builder;
 mod error;
+pub mod import;
 mod inference;
 mod loading;
 mod model;
 mod parser;
+pub mod quantize;
+pub mod schema;
+pub mod schema_parser;
 mod shapes;
 mod weights;
+pub mod guidestone;
 pub mod zoo;
 
 pub use error::{AkidaModelError, Result};

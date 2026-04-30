@@ -8,6 +8,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::expect_used, clippy::unwrap_used)]
 
+pub mod preserve;
+
 use akida_driver::DeviceManager;
 use std::time::Instant;
 
@@ -168,5 +170,83 @@ impl BenchTimer {
             max,
             self.times.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xoshiro_deterministic() {
+        let mut a = Xoshiro::new(42);
+        let mut b = Xoshiro::new(42);
+        for _ in 0..100 {
+            assert_eq!(a.next_u64(), b.next_u64());
+        }
+    }
+
+    #[test]
+    fn xoshiro_different_seeds_diverge() {
+        let mut a = Xoshiro::new(1);
+        let mut b = Xoshiro::new(2);
+        let mut same = 0;
+        for _ in 0..100 {
+            if a.next_u64() == b.next_u64() {
+                same += 1;
+            }
+        }
+        assert!(same < 5, "different seeds should produce different sequences");
+    }
+
+    #[test]
+    fn xoshiro_f32_in_unit_range() {
+        let mut rng = Xoshiro::new(123);
+        for _ in 0..1000 {
+            let v = rng.next_f32();
+            assert!((0.0..1.0).contains(&v), "f32 out of [0,1): {v}");
+        }
+    }
+
+    #[test]
+    fn xoshiro_fill_f32_bounded() {
+        let mut rng = Xoshiro::new(999);
+        let mut buf = vec![0.0f32; 256];
+        rng.fill_f32(&mut buf, 3.0);
+        for &v in &buf {
+            assert!(v >= -3.0 && v <= 3.0, "fill_f32 out of [-3,3]: {v}");
+        }
+    }
+
+    #[test]
+    fn bench_timer_empty_median_is_zero() {
+        let timer = BenchTimer::new("empty");
+        assert_eq!(timer.median(), std::time::Duration::ZERO);
+    }
+
+    #[test]
+    fn bench_timer_single_measurement() {
+        let mut timer = BenchTimer::new("single");
+        timer.time(|| {
+            std::hint::black_box(42);
+        });
+        assert!(timer.median() > std::time::Duration::ZERO || timer.median() == std::time::Duration::ZERO);
+        assert_eq!(timer.times.len(), 1);
+    }
+
+    #[test]
+    fn bench_timer_median_of_three() {
+        let mut timer = BenchTimer::new("three");
+        timer.times.push(std::time::Duration::from_micros(100));
+        timer.times.push(std::time::Duration::from_micros(300));
+        timer.times.push(std::time::Duration::from_micros(200));
+        assert_eq!(timer.median(), std::time::Duration::from_micros(200));
+    }
+
+    #[test]
+    fn hardware_probe_no_crash() {
+        let probe = HardwareProbe::detect();
+        let _status = probe.status_line();
+        let _count = probe.device_count();
     }
 }

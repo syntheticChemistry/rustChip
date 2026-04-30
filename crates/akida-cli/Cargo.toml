@@ -12,6 +12,7 @@ authors.workspace    = true
 [dependencies]
 akida-driver = { workspace = true }
 akida-chip   = { workspace = true }
+akida-models = { workspace = true }
 anyhow       = { workspace = true }
 tracing      = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -66,4 +66,7 @@ pub fn pack_int4(values: &[i8]) -> Vec<u8> {
 }
 ```
 
-This is implemented in `crates/akida-models/src/quantize.rs` (Phase 0.2).
+This will be implemented in `crates/akida-models/src/quantize.rs` when the
+Rust-native conversion pipeline lands (tracked as Phase 0.2 in `ProgramBuilder`).
+For now, the Python validation oracle (`scripts/export_zoo.py`) handles quantization
+via the BrainChip SDK.

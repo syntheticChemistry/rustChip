@@ -1,5 +1,13 @@
 # AKD1000 Exploration: Novel Applications for Computational Physics
 
+> **Historical document.** This was the original exploration from February 2026,
+> written during early SDK-based hardware measurement. For the current NPU
+> science narrative grounded in pure-Rust hardware evidence, see
+> [`whitePaper/explorations/WHY_NPU.md`](../whitePaper/explorations/WHY_NPU.md)
+> and [`whitePaper/explorations/SPRINGS_ON_SILICON.md`](../whitePaper/explorations/SPRINGS_ON_SILICON.md).
+> The MetaTF-era framing below is partially superseded by the sovereign Rust
+> driver (Phase D), but the scientific questions remain valid.
+
 **Date**: February 20, 2026
 **Hardware**: BrainChip AKD1000 @ PCIe `08:00.0`, driver loaded, `/dev/akida0`
 **SDK**: Akida 2.19.1 installed, hardware detected (78 NPs), benchmarked

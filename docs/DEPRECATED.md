@@ -3,7 +3,7 @@
 The files at the root of this repository (`akida-pcie-core.c`, `Makefile`,
 `install.sh`, `build_kernel_w_cma.sh`) are the original BrainChip C PCIe driver.
 
-**They are kept for reference only. All active development is in `rust/`.**
+**They are kept for reference only. All active development is in `crates/`.**
 
 ---
 
@@ -49,5 +49,7 @@ After (pure Rust):
 4. Creates `/dev/akida{N}` character devices
 5. Exposes `read`/`write` syscalls that trigger DMA
 
-The Rust VFIO backend (`rust/crates/akida-driver/src/vfio/mod.rs`) replaces
+The Rust VFIO backend (`crates/akida-driver/src/vfio/mod.rs`) replaces
 all of this with userspace equivalents via the Linux VFIO/IOMMU framework.
+The glowplug module (`crates/akida-driver/src/glowplug.rs`) provides sovereign
+device lifecycle management — bind, warm boot, teardown — without this module.

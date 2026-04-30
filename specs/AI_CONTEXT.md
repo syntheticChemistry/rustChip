@@ -25,6 +25,7 @@ akida-chip                  ← no deps (pure silicon model)
   src/sram.rs               ← BAR1 layout model, SramKind, ProbePoint
     ↑
 akida-driver                ← depends on akida-chip + rustix + libc (VFIO ioctls)
+                               feature "test-mocks" exposes SyntheticNpuBackend
   src/sram.rs               ← SramAccessor (BAR0 register + BAR1 R/W)
   src/tenancy.rs            ← MultiTenantDevice (NP slot management)
   src/evolution.rs          ← NpuEvolver (online weight mutation)
@@ -34,10 +35,10 @@ akida-driver                ← depends on akida-chip + rustix + libc (VFIO ioct
   src/capabilities.rs       ← Capabilities::from_bar0() (runtime discovery)
     ↑               ↑
 akida-models      akida-bench       akida-cli
-  src/builder.rs    probe_sram      (CLI tool)
-(FlatBuffer +       (SRAM diag)
- ProgramBuilder)    bench_bar
-                    bench_exp002
+  src/builder.rs    probe_sram      (CLI: enumerate,
+  src/parser.rs     (SRAM diag)      info, bind-vfio,
+(FlatBuffer +       bench_bar        setup, verify)
+ snap + parser)     bench_exp002
 ```
 
 Do not create circular dependencies. `akida-chip` must remain zero-dependency.
@@ -88,7 +89,19 @@ The only acceptable hardcoded values are PCIe vendor/device IDs in
 
 `akida-chip` has `#![forbid(unsafe_code)]`. Keep it that way.
 
-`akida-driver` has unsafe code in exactly one place: `src/vfio/mod.rs`.
+`akida-driver` uses `deny(unsafe_code)` at crate level in `Cargo.toml`
+(`[lints.rust] unsafe_code = "deny"`). Targeted `#![allow(unsafe_code)]`
+inner attributes exist on exactly 5 modules that require raw syscalls or
+memory-mapped I/O:
+
+| Module | Reason |
+|--------|--------|
+| `src/vfio/ioctls.rs` | VFIO ioctls via `libc::ioctl` |
+| `src/vfio/dma.rs` | mmap, mlock, IOMMU mapping |
+| `src/vfio/container.rs` | Raw fd ownership transfer |
+| `src/mmio.rs` | Volatile reads/writes to hardware registers |
+| `src/backends/mmap.rs` | mmap/munmap for BAR memory-mapped regions |
+
 Every unsafe block must have:
 1. A comment explaining **why** unsafe is necessary (what kernel API requires it)
 2. **Invariants** the code maintains
@@ -96,7 +109,8 @@ Every unsafe block must have:
 
 `IoHandle` in `src/io.rs` is now zero-unsafe — uses `BorrowedFd<'fd>` via `rustix`.
 
-Do not add unsafe code outside `vfio/mod.rs` without a documented reason.
+Do not add unsafe code outside these 5 modules without a documented reason
+and a corresponding `#![allow(unsafe_code, reason = "...")]` attribute.
 
 ---
 
@@ -335,3 +349,24 @@ The only required changes:
   Use ASCII equivalents (`eps`, `alpha`). rustc warns on mixed-script confusables.
 - Do not let bench Phase 1 (software simulation) binaries exit non-zero.
   They must pass without hardware. Phase 2 failures are expected without hardware.
+
+---
+
+## Recent changes (April 2026)
+
+These changes affect code conventions and may surprise an AI assistant
+working from cached context:
+
+- **`LEGACY_TEST_MAGIC`** replaces `FLATBUFFERS_MAGIC` everywhere. The parser
+  now does Snappy decompression first (`parser::decompress_fbz`), then parses
+  the resulting FlatBuffer. Legacy magic is only for hand-built test models.
+- **`test-mocks` feature flag** on `akida-driver` exposes `SyntheticNpuBackend` —
+  a minimal deterministic mock that returns input as output. Use for integration
+  tests that need an `NpuBackend` without hardware or full software simulation.
+- **`akida-models`** now depends on `snap` (workspace dependency) for Snappy
+  decompression of `.fbz` files.
+- **CLI**: `akida setup` and `akida verify` subcommands are available. `setup`
+  calls `akida_driver::setup::NpuSetup::run()`. `verify` checks PCIe discovery,
+  kernel module status, device nodes, and VFIO container.
+- **`SetupFailed`** error variant added to `AkidaError` (ported from toadStool).
+- See `specs/EVOLUTION.md` for the full toadStool port log and remaining work.

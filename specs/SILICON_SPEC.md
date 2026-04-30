@@ -203,16 +203,21 @@ See `../docs/BEYOND_SDK.md` Discovery 7 and 9 for methodology.
 
 ```
 .fbz file structure (corrected — see syntheticChemistry/rustChip#1):
-  [varint]   Snappy uncompressed-size (1–5 bytes, no fixed magic)
+  [varint]   Snappy uncompressed-size (1–5 bytes, LEB128/Snappy varint)
   [N bytes]  Snappy block-compressed payload
+  [M bytes]  Zero-padding to alignment boundary (BrainChip SDK artifact)
     → decompressed: standard FlatBuffer binary
-      → bytes [0..4]: root table offset (u32 LE)
-      → version string at variable offset (observed: 33-35)
+      → bytes [0..4]: root table offset (u32 LE, typically 0x10)
+      → version string via vtable (observed at offsets 30-35 in decompressed data)
       → root table → program_info + program_data
 
   NOTE: earlier documentation claimed a fixed "AKIDA" magic at offset 0.
-  Testing against the full Akida model zoo (v1 + v2) confirmed there are
-  no fixed magic bytes. The first bytes are the Snappy varint.
+  There are no fixed magic bytes. The trailing zero-padding is significant:
+  0x00 is a valid 1-byte Snappy literal chunk, so naive decompression of
+  the padded file overflows the output buffer. The parser probes for the
+  exact Snappy stream boundary.
+  Validated against BrainChip model zoo (v1 + v2): ds_cnn_kws, vgg_utk_face,
+  akidanet, mobilenet, yolo, centernet, gxnor.
 
 program_info  (~332 bytes for minimal ESN model):
   NP routing: which NPs execute which layers

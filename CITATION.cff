@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "rustChip — Pure Rust Neuromorphic Inference for BrainChip Akida"
+type: software
+authors:
+  - name: "ecoPrimal"
+    email: "ecoPrimal@pm.me"
+repository-code: "https://github.com/syntheticChemistry/rustChip"
+url: "https://primals.eco"
+license: "AGPL-3.0-or-later"
+version: "0.1.0"
+date-released: "2026-04-30"
+keywords:
+  - neuromorphic
+  - akida
+  - npu
+  - rust
+  - vfio
+  - flatbuffers
+  - inference
+  - sovereign-compute
+abstract: >-
+  Pure Rust software stack for BrainChip Akida neuromorphic processors
+  (AKD1000, AKD1500). Parses, converts, loads, and runs neural network
+  models without Python, without the vendor SDK, and without a kernel
+  module. 29-model zoo, pure Rust quantization/serialization pipeline,
+  VFIO passthrough driver. Part of the ecoPrimals sovereign compute
+  ecosystem.

@@ -16,6 +16,10 @@ akida-chip   = { workspace = true }
 thiserror    = { workspace = true }
 bytes        = { workspace = true }
 snap         = { workspace = true }
+sha2         = { workspace = true }
+safetensors  = { workspace = true }
+flatbuffers  = { workspace = true }
+onnx-rs      = { workspace = true }
 tracing      = { workspace = true }
 
 [dependencies.tracing-subscriber]

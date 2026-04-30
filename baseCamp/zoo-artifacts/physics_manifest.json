@@ -1,0 +1,107 @@
+{
+  "generator": "scripts/export_physics.py",
+  "akida_version": "2.19.1",
+  "timestamp": "2026-04-29T21:42:46Z",
+  "models": [
+    {
+      "name": "esn_readout",
+      "filename": "esn_readout.fbz",
+      "spring": "hotSpring",
+      "experiment": "Exp 022",
+      "description": "Lattice QCD thermalization detector (ESN readout)",
+      "input_shape": [
+        10,
+        5,
+        1
+      ],
+      "file_size": 107034,
+      "status": "ok",
+      "export_time_s": 9.63,
+      "akida_input_shape": [
+        10,
+        5,
+        1
+      ],
+      "akida_output_shape": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "phase_classifier",
+      "filename": "phase_classifier.fbz",
+      "spring": "hotSpring",
+      "experiment": "Exp 022",
+      "description": "SU(3) confined/deconfined phase classifier",
+      "input_shape": [
+        3,
+        1,
+        1
+      ],
+      "file_size": 4082,
+      "status": "ok",
+      "export_time_s": 2.47,
+      "akida_input_shape": [
+        3,
+        1,
+        1
+      ],
+      "akida_output_shape": [
+        1,
+        1,
+        2
+      ]
+    },
+    {
+      "name": "transport_predictor",
+      "filename": "transport_predictor.fbz",
+      "spring": "hotSpring",
+      "experiment": "Exp 022",
+      "description": "WDM transport coefficient predictor (D*, eta*, lambda*)",
+      "input_shape": [
+        6,
+        1,
+        1
+      ],
+      "file_size": 7522,
+      "status": "ok",
+      "export_time_s": 2.25,
+      "akida_input_shape": [
+        6,
+        1,
+        1
+      ],
+      "akida_output_shape": [
+        1,
+        1,
+        3
+      ]
+    },
+    {
+      "name": "anderson_classifier",
+      "filename": "anderson_classifier.fbz",
+      "spring": "groundSpring",
+      "experiment": "Exp 028",
+      "description": "Anderson localization regime classifier (loc/diff/critical)",
+      "input_shape": [
+        4,
+        1,
+        1
+      ],
+      "file_size": 4610,
+      "status": "ok",
+      "export_time_s": 2.23,
+      "akida_input_shape": [
+        4,
+        1,
+        1
+      ],
+      "akida_output_shape": [
+        1,
+        1,
+        3
+      ]
+    }
+  ]
+}

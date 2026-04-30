@@ -3,7 +3,7 @@
 **URL:** https://doc.brainchipinc.com/api_reference/cnn2snn.html
 **Access:** Python `akida.AkidaNet`, `MetaTF`, `QuantizeML`, `CNN2SNN`
 **License:** BrainChip proprietary (models free for evaluation, check commercial terms)
-**Status:** Reviewed February 2026; source for `.fbz` files used in rustChip benchmarks
+**Status:** Fully exported April 2026 — 21 models converted to `.fbz`, all parse with rustChip
 
 ---
 
@@ -26,23 +26,37 @@ Python stack.
 
 ---
 
-## Model Catalog
+## Model Catalog (exported April 2026, Akida SDK 2.19.1)
 
-| Model | Task | Input | Accuracy | Program size | AKD1000 latency |
-|-------|------|-------|----------|-------------|----------------|
-| **AkidaNet 0.5** | ImageNet classification | 160×160×3 | top-1 65.6% | ~400 KB | ~800 µs |
-| **AkidaNet 1.0** | ImageNet classification | 224×224×3 | top-1 70.6% | ~1.6 MB | ~2.1 ms |
-| **DS-CNN** | Keyword spotting (35 words) | 49×10 MFCC | 93.8% | ~280 KB | ~700 µs |
-| **MobileNetV1 0.25** | ImageNet | 128×128×3 | top-1 47.4% | ~180 KB | ~600 µs |
-| **MobileNetV2** | ImageNet | 224×224×3 | top-1 68.2% | ~880 KB | ~1.4 ms |
-| **ResNet** | ImageNet | 224×224×3 | top-1 72.4% | ~2.1 MB | ~3.2 ms |
-| **VGG-like** | CIFAR-10 | 32×32×3 | 92.7% | ~240 KB | ~680 µs |
-| **YOLO v2** | Object detection | 224×224×3 | mAP 42.4% | ~1.8 MB | ~2.8 ms |
-| **Face recognition** | LFW verification | 112×112×3 | 99.1% LFW | ~1.2 MB | ~1.9 ms |
-| **DVS Gesture** | Event-based gesture | 64×64×2 | 97.9% | ~120 KB | ~580 µs |
-| **Occlusion Detection** | Traffic/safety | 320×240×3 | mAP 0.28 | ~1.6 MB | ~2.3 ms |
+All 21 models below are exported via `scripts/export_zoo.py` and parse with
+`akida-models::Model::from_file()`. Run `cargo run --bin akida -- zoo-status`
+to see live cache status.
 
-*Latency estimates from MetaTF benchmarks; may vary from rustChip measurements.*
+| Model | Task | Input | .fbz size | Rust parse |
+|-------|------|-------|-----------|------------|
+| **AkidaNet ImageNet** | Classification | 224×224×3 | 5,269 KB | OK |
+| **AkidaNet18 ImageNet** | Classification | 224×224×3 | 2,827 KB | OK |
+| **AkidaNet PlantVillage** | Disease classification | 224×224×3 | 1,402 KB | OK |
+| **AkidaNet VWW** | Visual Wake Words | 96×96×3 | 304 KB | OK |
+| **AkidaNet FaceID** | Face identification | 112×96×3 | 2,834 KB | OK |
+| **Akida UNet Portrait** | Segmentation | 128×128×3 | 1,302 KB | OK |
+| **CenterNet VOC** | Object detection | 384×384×3 | 2,864 KB | OK |
+| **ConvTiny Gesture** | DVS gesture | 64×64×10 | 174 KB | OK |
+| **ConvTiny Handy Samsung** | Gesture | 120×160×2 | 172 KB | OK |
+| **DS-CNN KWS** | Keyword spotting | 49×10×1 | 41 KB | OK |
+| **GXNOR MNIST** | Digit classification | 28×28×1 | 203 KB | OK |
+| **MobileNet ImageNet** | Classification | 224×224×3 | 5,028 KB | OK |
+| **PointNet++ ModelNet40** | 3D point cloud | 8×256×3 | 343 KB | OK |
+| **TENN Recurrent SC12** | Speech commands | 1×256×1 | 70 KB | OK |
+| **TENN Recurrent UORED** | Audio | 1×256×1 | 37 KB | OK |
+| **TENN Spatiotemporal DVS128** | DVS gesture | 128×128×2 | 225 KB | OK |
+| **TENN Spatiotemporal Eye** | Eye tracking | 80×106×2 | 275 KB | OK |
+| **TENN Spatiotemporal Jester** | Video gesture | 100×100×3 | 1,611 KB | OK |
+| **VGG UTK Face** | Age regression | 32×32×3 | 150 KB | OK |
+| **YOLO VOC** | Object detection | 224×224×3 | 4,368 KB | OK |
+| **YOLO WiderFace** | Face detection | 224×224×3 | 4,239 KB | OK |
+
+2 models not available for Akida v2: `akidanet_edge_imagenet`, `akidanet_faceidentification_edge`.
 
 ---
 
@@ -106,21 +120,28 @@ from an arbitrary Keras model without MetaTF. The path to close this gap:
 
 ## Getting .fbz Files
 
-BrainChip distributes pre-compiled `.fbz` files through:
-
-```python
-# Python (requires akida SDK, not Rust)
-from akida_models import AkidaNetModel
-model = AkidaNetModel(classes=1000)
-model.save("akidanet.fbz")
-```
-
-Or download from: https://github.com/Brainchip-Inc/akida_examples
-
-These `.fbz` files can then be loaded directly by `akida-models`:
+### Automated export (recommended)
 
 ```bash
-# Using akida-cli (after downloading .fbz)
-akida info 0  # verify hardware
-cargo run --example load_to_device -- --model ds_cnn_kws.fbz
+# One-time setup: Python 3.10 venv as validation oracle
+python3.10 -m venv .zoo-venv
+source .zoo-venv/bin/activate
+pip install akida akida-models quantizeml cnn2snn
+
+# Export all 21 pretrained models
+python scripts/export_zoo.py
+
+# Verify with Rust parser
+cargo run --bin akida -- zoo-status
+cargo run --bin akida -- parse baseCamp/zoo-artifacts/ds_cnn_kws.fbz
+```
+
+### Manual download
+
+BrainChip distributes examples at: https://github.com/Brainchip-Inc/akida_examples
+
+Any `.fbz` file can be loaded by `akida-models`:
+
+```bash
+cargo run --bin akida -- parse <model.fbz>
 ```

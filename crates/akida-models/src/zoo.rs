@@ -65,25 +65,49 @@ pub enum ValidationTier {
 /// Models available in the Akida Model Zoo
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZooModel {
-    // ── BrainChip MetaTF ────────────────────────────────────────────────────
-    /// `AkidaNet` `ImageNet` classifier (0.5 width, 160×160)
-    AkidaNet05_160,
+    // ── BrainChip MetaTF (exported via scripts/export_zoo.py) ───────────────
     /// `AkidaNet` `ImageNet` classifier (1.0 width, 224×224)
-    AkidaNet10_224,
+    AkidaNetImagenet,
+    /// `AkidaNet` 18-layer `ImageNet` classifier (224×224)
+    AkidaNet18Imagenet,
+    /// `AkidaNet` PlantVillage disease classifier
+    AkidaNetPlantvillage,
+    /// `AkidaNet` Visual Wake Words (96×96)
+    AkidaNetVww,
+    /// `AkidaNet` face identification
+    AkidaNetFaceId,
+    /// `Akida` U-Net portrait segmentation (128×128)
+    AkidaUnetPortrait128,
+    /// `CenterNet` VOC object detection
+    CenterNetVoc,
+    /// ConvTiny DVS gesture recognition (11 classes)
+    ConvtinyGesture,
+    /// ConvTiny Samsung Handy gesture recognition
+    ConvtinyHandySamsung,
     /// DS-CNN for keyword spotting (35 words, Google Speech Commands v2)
     DsCnnKws,
-    /// `MobileNetV2` for `ImageNet`
-    MobileNetV2,
-    /// Vision Transformer (tiny)
-    ViTTiny,
-    /// YOLO object detection
-    YoloV8n,
-    /// `PointNet++` for 3D point clouds
-    PointNetPlusPlus,
-    /// DVS Gesture recognition (11 classes, DVS128 dataset)
-    DvsGesture,
-    /// Event camera model
-    EventCamera,
+    /// GXNOR MNIST digit classification
+    GxnorMnist,
+    /// `MobileNet` `ImageNet` classifier
+    MobileNetImagenet,
+    /// `PointNet++` ModelNet40 3D point cloud classification
+    PointNetPlusModelnet40,
+    /// TENN recurrent speech commands (12 classes)
+    TennRecurrentSc12,
+    /// TENN recurrent UORED
+    TennRecurrentUored,
+    /// TENN spatiotemporal DVS128
+    TennSpatiotemporalDvs128,
+    /// TENN spatiotemporal eye tracking
+    TennSpatiotemporalEye,
+    /// TENN spatiotemporal Jester gesture
+    TennSpatiotemporalJester,
+    /// VGG UTK face age regression
+    VggUtkFace,
+    /// YOLO VOC object detection
+    YoloVoc,
+    /// YOLO WiderFace detection
+    YoloWiderface,
 
     // ── NeuroBench streaming benchmarks ─────────────────────────────────────
     /// ESN for chaotic time series prediction (MSLP dataset)
@@ -92,11 +116,11 @@ pub enum ZooModel {
     EcgAnomaly,
 
     // ── ecoPrimals physics — validated on real AKD1000 ──────────────────────
-    /// ESN readout for lattice QCD thermalization detection (hotSpring Exp 022; ecosystem context — not a runtime dependency)
+    /// ESN readout for lattice QCD thermalization detection (hotSpring Exp 022)
     EsnQcdThermalization,
-    /// Phase classifier: SU(3) confined/deconfined (hotSpring Exp 022; ecosystem context — not a runtime dependency)
+    /// Phase classifier: SU(3) confined/deconfined (hotSpring Exp 022)
     PhaseClassifierSu3,
-    /// WDM transport coefficient predictor — D*, η*, λ* (hotSpring Exp 022; ecosystem context — not a runtime dependency)
+    /// WDM transport coefficient predictor — D*, η*, λ* (hotSpring Exp 022)
     TransportPredictorWdm,
     /// Anderson localization regime classifier (groundSpring Exp 028)
     AndersonRegimeClassifier,
@@ -107,24 +131,36 @@ pub enum ZooModel {
 }
 
 impl ZooModel {
-    /// Get model filename
+    /// Get model filename (matches output of `scripts/export_zoo.py`)
     pub const fn filename(&self) -> &'static str {
         match self {
-            Self::AkidaNet05_160 => "akidanet_05_160.fbz",
-            Self::AkidaNet10_224 => "akidanet_10_224.fbz",
+            Self::AkidaNetImagenet => "akidanet_imagenet.fbz",
+            Self::AkidaNet18Imagenet => "akidanet18_imagenet.fbz",
+            Self::AkidaNetPlantvillage => "akidanet_plantvillage.fbz",
+            Self::AkidaNetVww => "akidanet_vww.fbz",
+            Self::AkidaNetFaceId => "akidanet_faceidentification.fbz",
+            Self::AkidaUnetPortrait128 => "akida_unet_portrait128.fbz",
+            Self::CenterNetVoc => "centernet_voc.fbz",
+            Self::ConvtinyGesture => "convtiny_gesture.fbz",
+            Self::ConvtinyHandySamsung => "convtiny_handy_samsung.fbz",
             Self::DsCnnKws => "ds_cnn_kws.fbz",
-            Self::MobileNetV2 => "mobilenetv2.fbz",
-            Self::ViTTiny => "vit_tiny.fbz",
-            Self::YoloV8n => "yolov8n.fbz",
-            Self::PointNetPlusPlus => "pointnet_plus.fbz",
-            Self::DvsGesture => "dvs_gesture.fbz",
-            Self::EventCamera => "event_camera.fbz",
+            Self::GxnorMnist => "gxnor_mnist.fbz",
+            Self::MobileNetImagenet => "mobilenet_imagenet.fbz",
+            Self::PointNetPlusModelnet40 => "pointnet_plus_modelnet40.fbz",
+            Self::TennRecurrentSc12 => "tenn_recurrent_sc12.fbz",
+            Self::TennRecurrentUored => "tenn_recurrent_uored.fbz",
+            Self::TennSpatiotemporalDvs128 => "tenn_spatiotemporal_dvs128.fbz",
+            Self::TennSpatiotemporalEye => "tenn_spatiotemporal_eye.fbz",
+            Self::TennSpatiotemporalJester => "tenn_spatiotemporal_jester.fbz",
+            Self::VggUtkFace => "vgg_utk_face.fbz",
+            Self::YoloVoc => "yolo_voc.fbz",
+            Self::YoloWiderface => "yolo_widerface.fbz",
             Self::EsnChaotic => "esn_chaotic.fbz",
             Self::EcgAnomaly => "ecg_anomaly.fbz",
-            Self::EsnQcdThermalization => "esn_qcd_thermalization.fbz",
-            Self::PhaseClassifierSu3 => "phase_classifier_su3.fbz",
-            Self::TransportPredictorWdm => "transport_predictor_wdm.fbz",
-            Self::AndersonRegimeClassifier => "anderson_regime_classifier.fbz",
+            Self::EsnQcdThermalization => "esn_readout.fbz",
+            Self::PhaseClassifierSu3 => "phase_classifier.fbz",
+            Self::TransportPredictorWdm => "transport_predictor.fbz",
+            Self::AndersonRegimeClassifier => "anderson_classifier.fbz",
             Self::MinimalFc => "minimal_fc.fbz",
         }
     }
@@ -132,15 +168,27 @@ impl ZooModel {
     /// Get model description
     pub const fn description(&self) -> &'static str {
         match self {
-            Self::AkidaNet05_160 => "AkidaNet ImageNet classifier (0.5 width, 160×160)",
-            Self::AkidaNet10_224 => "AkidaNet ImageNet classifier (1.0 width, 224×224)",
+            Self::AkidaNetImagenet => "AkidaNet ImageNet classifier (1.0 width, 224x224)",
+            Self::AkidaNet18Imagenet => "AkidaNet18 ImageNet classifier (224x224)",
+            Self::AkidaNetPlantvillage => "AkidaNet PlantVillage disease classifier (224x224)",
+            Self::AkidaNetVww => "AkidaNet Visual Wake Words (96x96)",
+            Self::AkidaNetFaceId => "AkidaNet face identification (112x96)",
+            Self::AkidaUnetPortrait128 => "Akida U-Net portrait segmentation (128x128)",
+            Self::CenterNetVoc => "CenterNet VOC object detection (384x384)",
+            Self::ConvtinyGesture => "ConvTiny DVS gesture recognition (11 classes, 64x64)",
+            Self::ConvtinyHandySamsung => "ConvTiny Samsung Handy gesture (120x160)",
             Self::DsCnnKws => "DS-CNN keyword spotting (35 words, Google Speech Commands v2)",
-            Self::MobileNetV2 => "MobileNetV2 ImageNet classifier",
-            Self::ViTTiny => "Vision Transformer (tiny) ImageNet classifier",
-            Self::YoloV8n => "YOLOv8 nano object detection (COCO)",
-            Self::PointNetPlusPlus => "PointNet++ 3D point cloud classification",
-            Self::DvsGesture => "DVS Gesture recognition (11 classes, DVS128)",
-            Self::EventCamera => "Event camera object detection",
+            Self::GxnorMnist => "GXNOR MNIST digit classification (28x28)",
+            Self::MobileNetImagenet => "MobileNet ImageNet classifier (224x224)",
+            Self::PointNetPlusModelnet40 => "PointNet++ ModelNet40 3D point cloud (8x256x3)",
+            Self::TennRecurrentSc12 => "TENN recurrent speech commands (12 classes)",
+            Self::TennRecurrentUored => "TENN recurrent UORED (4 classes)",
+            Self::TennSpatiotemporalDvs128 => "TENN spatiotemporal DVS128 gesture (128x128x2)",
+            Self::TennSpatiotemporalEye => "TENN spatiotemporal eye tracking (80x106x2)",
+            Self::TennSpatiotemporalJester => "TENN spatiotemporal Jester gesture (100x100x3)",
+            Self::VggUtkFace => "VGG UTK face age regression (32x32x3)",
+            Self::YoloVoc => "YOLO AkidaNet VOC object detection (224x224)",
+            Self::YoloWiderface => "YOLO AkidaNet WiderFace detection (224x224)",
             Self::EsnChaotic => "ESN chaotic time series prediction (MSLP, NeuroBench)",
             Self::EcgAnomaly => "ECG anomaly detection (MIT-BIH Arrhythmia, NeuroBench)",
             Self::EsnQcdThermalization => {
@@ -150,36 +198,49 @@ impl ZooModel {
                 "SU(3) phase classifier: confined/deconfined (hotSpring Exp 022)"
             }
             Self::TransportPredictorWdm => {
-                "WDM transport predictor: D*, η*, λ* from plasma observables"
+                "WDM transport predictor: D*, eta*, lambda* from plasma observables"
             }
             Self::AndersonRegimeClassifier => {
-                "Anderson localization regime: localized/diffusive/critical (groundSpring Exp 028)"
+                "Anderson localization regime: loc/diff/critical (groundSpring Exp 028)"
             }
-            Self::MinimalFc => "Minimal FC(50→1) smoke test for program_external() validation",
+            Self::MinimalFc => "Minimal FC(50->1) smoke test for program_external() validation",
         }
     }
 
     /// NP budget required on AKD1000 (number of NPs consumed)
     ///
     /// AKD1000 has 1,000 NPs total. Sum of co-located models must be ≤ 1,000.
+    /// Estimates for MetaTF zoo models based on architecture complexity.
     pub const fn np_budget(&self) -> usize {
         match self {
             Self::MinimalFc => 51,
-            Self::EcgAnomaly => 96,
             Self::PhaseClassifierSu3 => 67,
             Self::AndersonRegimeClassifier => 68,
-            Self::EsnQcdThermalization => 179,
+            Self::EcgAnomaly => 96,
             Self::TransportPredictorWdm => 134,
+            Self::EsnQcdThermalization => 179,
+            Self::TennRecurrentUored => 120,
+            Self::TennRecurrentSc12 => 180,
+            Self::VggUtkFace => 200,
+            Self::GxnorMnist => 220,
             Self::EsnChaotic => 259,
+            Self::AkidaNetVww => 300,
+            Self::ConvtinyGesture => 350,
+            Self::ConvtinyHandySamsung => 350,
             Self::DsCnnKws => 380,
-            Self::DvsGesture => 420,
-            Self::AkidaNet05_160 => 450,
-            Self::AkidaNet10_224 => 700,
-            Self::MobileNetV2 => 680,
-            Self::ViTTiny => 800,
-            Self::YoloV8n => 760,
-            Self::PointNetPlusPlus => 520,
-            Self::EventCamera => 540,
+            Self::TennSpatiotemporalDvs128 => 400,
+            Self::TennSpatiotemporalEye => 420,
+            Self::PointNetPlusModelnet40 => 450,
+            Self::AkidaNetPlantvillage => 500,
+            Self::TennSpatiotemporalJester => 520,
+            Self::AkidaUnetPortrait128 => 550,
+            Self::AkidaNetFaceId => 600,
+            Self::CenterNetVoc => 650,
+            Self::MobileNetImagenet => 680,
+            Self::AkidaNetImagenet => 700,
+            Self::AkidaNet18Imagenet => 700,
+            Self::YoloVoc => 760,
+            Self::YoloWiderface => 760,
         }
     }
 
@@ -188,19 +249,14 @@ impl ZooModel {
     /// Returns `None` if not yet hardware-validated.
     pub const fn throughput_hz(&self) -> Option<u32> {
         match self {
-            // ecoPrimals physics — measured on live hardware (Exp 022, 028)
             Self::EsnQcdThermalization => Some(18_500),
             Self::PhaseClassifierSu3 => Some(21_200),
             Self::TransportPredictorWdm => Some(17_800),
             Self::AndersonRegimeClassifier => Some(22_400),
             Self::MinimalFc => Some(24_000),
-            // NeuroBench reference numbers
             Self::DsCnnKws => Some(1_400),
-            Self::DvsGesture => Some(1_720),
             Self::EsnChaotic => Some(18_000),
             Self::EcgAnomaly => Some(2_200),
-            Self::AkidaNet05_160 => Some(1_250),
-            // Not yet hardware-validated
             _ => None,
         }
     }
@@ -221,13 +277,33 @@ impl ZooModel {
     /// Validation tier — how thoroughly this model has been tested
     pub const fn validation(&self) -> ValidationTier {
         match self {
-            // Validated on real AKD1000 hardware
             Self::EsnQcdThermalization
             | Self::PhaseClassifierSu3
             | Self::TransportPredictorWdm
             | Self::AndersonRegimeClassifier
             | Self::MinimalFc => ValidationTier::HardwareValidated,
-            // All other variants: analysis tier (conversion path defined or pending).
+            // All MetaTF zoo models: exported and parsed successfully
+            Self::AkidaNetImagenet
+            | Self::AkidaNet18Imagenet
+            | Self::AkidaNetPlantvillage
+            | Self::AkidaNetVww
+            | Self::AkidaNetFaceId
+            | Self::AkidaUnetPortrait128
+            | Self::CenterNetVoc
+            | Self::ConvtinyGesture
+            | Self::ConvtinyHandySamsung
+            | Self::DsCnnKws
+            | Self::GxnorMnist
+            | Self::MobileNetImagenet
+            | Self::PointNetPlusModelnet40
+            | Self::TennRecurrentSc12
+            | Self::TennRecurrentUored
+            | Self::TennSpatiotemporalDvs128
+            | Self::TennSpatiotemporalEye
+            | Self::TennSpatiotemporalJester
+            | Self::VggUtkFace
+            | Self::YoloVoc
+            | Self::YoloWiderface => ValidationTier::Functional,
             _ => ValidationTier::Analysis,
         }
     }
@@ -235,15 +311,27 @@ impl ZooModel {
     /// Source / origin of this model
     pub const fn source(&self) -> ModelSource {
         match self {
-            Self::AkidaNet05_160
-            | Self::AkidaNet10_224
+            Self::AkidaNetImagenet
+            | Self::AkidaNet18Imagenet
+            | Self::AkidaNetPlantvillage
+            | Self::AkidaNetVww
+            | Self::AkidaNetFaceId
+            | Self::AkidaUnetPortrait128
+            | Self::CenterNetVoc
+            | Self::ConvtinyGesture
+            | Self::ConvtinyHandySamsung
             | Self::DsCnnKws
-            | Self::MobileNetV2
-            | Self::ViTTiny
-            | Self::YoloV8n
-            | Self::PointNetPlusPlus
-            | Self::DvsGesture
-            | Self::EventCamera => ModelSource::BrainChipMetaTf,
+            | Self::GxnorMnist
+            | Self::MobileNetImagenet
+            | Self::PointNetPlusModelnet40
+            | Self::TennRecurrentSc12
+            | Self::TennRecurrentUored
+            | Self::TennSpatiotemporalDvs128
+            | Self::TennSpatiotemporalEye
+            | Self::TennSpatiotemporalJester
+            | Self::VggUtkFace
+            | Self::YoloVoc
+            | Self::YoloWiderface => ModelSource::BrainChipMetaTf,
             Self::EsnChaotic | Self::EcgAnomaly => ModelSource::NeuroBench,
             Self::EsnQcdThermalization
             | Self::PhaseClassifierSu3
@@ -253,24 +341,36 @@ impl ZooModel {
         }
     }
 
-    /// Get expected model size (approximate bytes)
+    /// Get expected model size (approximate bytes, from actual exports)
     pub const fn expected_size_bytes(&self) -> usize {
         match self {
-            Self::AkidaNet05_160 => 400_000,
-            Self::AkidaNet10_224 => 1_600_000,
-            Self::DsCnnKws => 280_000,
-            Self::MobileNetV2 => 3_500_000,
-            Self::ViTTiny => 5_000_000,
-            Self::YoloV8n => 1_800_000,
-            Self::PointNetPlusPlus => 1_500_000,
-            Self::DvsGesture => 120_000,
-            Self::EventCamera => 1_200_000,
+            Self::AkidaNetImagenet => 5_269_000,
+            Self::AkidaNet18Imagenet => 2_827_000,
+            Self::AkidaNetPlantvillage => 1_402_000,
+            Self::AkidaNetVww => 304_000,
+            Self::AkidaNetFaceId => 2_834_000,
+            Self::AkidaUnetPortrait128 => 1_302_000,
+            Self::CenterNetVoc => 2_864_000,
+            Self::ConvtinyGesture => 174_000,
+            Self::ConvtinyHandySamsung => 172_000,
+            Self::DsCnnKws => 41_000,
+            Self::GxnorMnist => 203_000,
+            Self::MobileNetImagenet => 5_028_000,
+            Self::PointNetPlusModelnet40 => 343_000,
+            Self::TennRecurrentSc12 => 70_000,
+            Self::TennRecurrentUored => 37_000,
+            Self::TennSpatiotemporalDvs128 => 225_000,
+            Self::TennSpatiotemporalEye => 275_000,
+            Self::TennSpatiotemporalJester => 1_611_000,
+            Self::VggUtkFace => 150_000,
+            Self::YoloVoc => 4_368_000,
+            Self::YoloWiderface => 4_239_000,
             Self::EsnChaotic => 100_000,
             Self::EcgAnomaly => 40_000,
-            Self::EsnQcdThermalization => 80_000,
-            Self::PhaseClassifierSu3 => 30_000,
-            Self::TransportPredictorWdm => 60_000,
-            Self::AndersonRegimeClassifier => 35_000,
+            Self::EsnQcdThermalization => 107_000,
+            Self::PhaseClassifierSu3 => 4_000,
+            Self::TransportPredictorWdm => 8_000,
+            Self::AndersonRegimeClassifier => 5_000,
             Self::MinimalFc => 2_000,
         }
     }
@@ -278,20 +378,32 @@ impl ZooModel {
     /// Get all available models
     pub const fn all() -> &'static [Self] {
         &[
-            // BrainChip MetaTF
-            Self::AkidaNet05_160,
-            Self::AkidaNet10_224,
+            // BrainChip MetaTF (21 models, exported via scripts/export_zoo.py)
+            Self::AkidaNetImagenet,
+            Self::AkidaNet18Imagenet,
+            Self::AkidaNetPlantvillage,
+            Self::AkidaNetVww,
+            Self::AkidaNetFaceId,
+            Self::AkidaUnetPortrait128,
+            Self::CenterNetVoc,
+            Self::ConvtinyGesture,
+            Self::ConvtinyHandySamsung,
             Self::DsCnnKws,
-            Self::MobileNetV2,
-            Self::ViTTiny,
-            Self::YoloV8n,
-            Self::PointNetPlusPlus,
-            Self::DvsGesture,
-            Self::EventCamera,
+            Self::GxnorMnist,
+            Self::MobileNetImagenet,
+            Self::PointNetPlusModelnet40,
+            Self::TennRecurrentSc12,
+            Self::TennRecurrentUored,
+            Self::TennSpatiotemporalDvs128,
+            Self::TennSpatiotemporalEye,
+            Self::TennSpatiotemporalJester,
+            Self::VggUtkFace,
+            Self::YoloVoc,
+            Self::YoloWiderface,
             // NeuroBench
             Self::EsnChaotic,
             Self::EcgAnomaly,
-            // ecoPrimals physics
+            // ecoPrimals physics (4 models, exported via scripts/export_physics.py)
             Self::EsnQcdThermalization,
             Self::PhaseClassifierSu3,
             Self::TransportPredictorWdm,
@@ -312,14 +424,36 @@ impl ZooModel {
         ]
     }
 
+    /// Get the 21 BrainChip MetaTF zoo models
+    pub const fn brainchip_zoo() -> &'static [Self] {
+        &[
+            Self::AkidaNetImagenet,
+            Self::AkidaNet18Imagenet,
+            Self::AkidaNetPlantvillage,
+            Self::AkidaNetVww,
+            Self::AkidaNetFaceId,
+            Self::AkidaUnetPortrait128,
+            Self::CenterNetVoc,
+            Self::ConvtinyGesture,
+            Self::ConvtinyHandySamsung,
+            Self::DsCnnKws,
+            Self::GxnorMnist,
+            Self::MobileNetImagenet,
+            Self::PointNetPlusModelnet40,
+            Self::TennRecurrentSc12,
+            Self::TennRecurrentUored,
+            Self::TennSpatiotemporalDvs128,
+            Self::TennSpatiotemporalEye,
+            Self::TennSpatiotemporalJester,
+            Self::VggUtkFace,
+            Self::YoloVoc,
+            Self::YoloWiderface,
+        ]
+    }
+
     /// Get models for `NeuroBench` benchmarks
     pub const fn neurobench_models() -> &'static [Self] {
-        &[
-            Self::DvsGesture,
-            Self::DsCnnKws,
-            Self::EsnChaotic,
-            Self::EcgAnomaly,
-        ]
+        &[Self::DsCnnKws, Self::EsnChaotic, Self::EcgAnomaly]
     }
 
     /// Get ecoPrimals physics models
@@ -335,13 +469,26 @@ impl ZooModel {
     /// Get task category
     pub const fn task(&self) -> ModelTask {
         match self {
-            Self::AkidaNet05_160 | Self::AkidaNet10_224 | Self::MobileNetV2 | Self::ViTTiny => {
-                ModelTask::ImageClassification
+            Self::AkidaNetImagenet
+            | Self::AkidaNet18Imagenet
+            | Self::AkidaNetPlantvillage
+            | Self::AkidaNetVww
+            | Self::MobileNetImagenet
+            | Self::GxnorMnist => ModelTask::ImageClassification,
+            Self::AkidaNetFaceId | Self::VggUtkFace => ModelTask::FaceAnalysis,
+            Self::AkidaUnetPortrait128 => ModelTask::Segmentation,
+            Self::CenterNetVoc | Self::YoloVoc | Self::YoloWiderface => {
+                ModelTask::ObjectDetection
             }
-            Self::DsCnnKws => ModelTask::KeywordSpotting,
-            Self::YoloV8n | Self::EventCamera => ModelTask::ObjectDetection,
-            Self::PointNetPlusPlus => ModelTask::PointCloud,
-            Self::DvsGesture => ModelTask::GestureRecognition,
+            Self::ConvtinyGesture
+            | Self::ConvtinyHandySamsung
+            | Self::TennSpatiotemporalDvs128
+            | Self::TennSpatiotemporalJester => ModelTask::GestureRecognition,
+            Self::DsCnnKws | Self::TennRecurrentSc12 | Self::TennRecurrentUored => {
+                ModelTask::KeywordSpotting
+            }
+            Self::TennSpatiotemporalEye => ModelTask::EyeTracking,
+            Self::PointNetPlusModelnet40 => ModelTask::PointCloud,
             Self::EsnChaotic | Self::EsnQcdThermalization | Self::TransportPredictorWdm => {
                 ModelTask::TimeSeriesPrediction
             }
@@ -358,14 +505,20 @@ impl ZooModel {
 pub enum ModelTask {
     /// Image classification
     ImageClassification,
+    /// Face identification or age regression
+    FaceAnalysis,
+    /// Semantic segmentation
+    Segmentation,
     /// Keyword/speech spotting
     KeywordSpotting,
     /// Object detection
     ObjectDetection,
     /// 3D point cloud processing
     PointCloud,
-    /// Gesture recognition (DVS)
+    /// Gesture recognition (DVS / video)
     GestureRecognition,
+    /// Eye tracking
+    EyeTracking,
     /// Time series prediction and chaotic systems
     TimeSeriesPrediction,
     /// Anomaly detection (ECG, sensor streams)
@@ -455,39 +608,37 @@ impl ModelZoo {
         );
     }
 
-    /// Load metadata for a model file
+    /// Load metadata for a model file.
+    ///
+    /// Attempts a full parse via [`Model::from_bytes`] to determine validity,
+    /// version, and layer count. Falls back to size-only metadata if parsing fails.
     fn load_metadata(model: ZooModel, path: &Path) -> Result<ModelMetadata> {
         let data = fs::read(path)
             .map_err(|e| AkidaModelError::loading_failed(format!("Cannot read model: {e}")))?;
 
         let size_bytes = data.len();
 
-        // Validate .fbz format (check FlatBuffers magic)
-        let is_valid = data.len() >= 4 && data[0..4] == [0x80, 0x44, 0x04, 0x10];
-
-        // Try to extract version (simplified - real impl would parse FlatBuffers)
-        let sdk_version = if data.len() > 40 {
-            // Version typically at offset 30-40
-            data[20..50]
-                .windows(6)
-                .find(|w| w.iter().all(|&b| b == b'.' || b.is_ascii_digit()))
-                .and_then(|w| {
-                    std::str::from_utf8(w)
-                        .ok()
-                        .map(|s| s.trim_end_matches('\0').to_string())
+        match crate::Model::from_bytes(&data) {
+            Ok(parsed) => Ok(ModelMetadata {
+                model,
+                path: path.to_path_buf(),
+                size_bytes,
+                is_valid: true,
+                sdk_version: Some(parsed.version().to_string()),
+                layer_count: Some(parsed.layer_count()),
+            }),
+            Err(e) => {
+                debug!("Model {} failed to parse: {e}", model.filename());
+                Ok(ModelMetadata {
+                    model,
+                    path: path.to_path_buf(),
+                    size_bytes,
+                    is_valid: false,
+                    sdk_version: None,
+                    layer_count: None,
                 })
-        } else {
-            None
-        };
-
-        Ok(ModelMetadata {
-            model,
-            path: path.to_path_buf(),
-            size_bytes,
-            is_valid,
-            sdk_version,
-            layer_count: None, // Would require full parsing
-        })
+            }
+        }
     }
 
     /// Check if model is available locally
@@ -617,20 +768,7 @@ impl ModelZoo {
                 ZooModel::ecoprimal_physics_models(),
             ),
             ("NeuroBench Benchmarks", ZooModel::neurobench_models()),
-            (
-                "BrainChip MetaTF Zoo",
-                &[
-                    ZooModel::DsCnnKws,
-                    ZooModel::DvsGesture,
-                    ZooModel::AkidaNet05_160,
-                    ZooModel::AkidaNet10_224,
-                    ZooModel::MobileNetV2,
-                    ZooModel::YoloV8n,
-                    ZooModel::PointNetPlusPlus,
-                    ZooModel::EventCamera,
-                    ZooModel::ViTTiny,
-                ],
-            ),
+            ("BrainChip MetaTF Zoo", ZooModel::brainchip_zoo()),
             ("Hand-Built", &[ZooModel::MinimalFc]),
         ];
 
@@ -671,17 +809,18 @@ mod tests {
     #[test]
     fn test_zoo_model_filenames() {
         assert_eq!(ZooModel::DsCnnKws.filename(), "ds_cnn_kws.fbz");
-        assert_eq!(ZooModel::DvsGesture.filename(), "dvs_gesture.fbz");
+        assert_eq!(ZooModel::ConvtinyGesture.filename(), "convtiny_gesture.fbz");
         assert_eq!(
             ZooModel::EsnQcdThermalization.filename(),
-            "esn_qcd_thermalization.fbz"
+            "esn_readout.fbz"
         );
         assert_eq!(ZooModel::MinimalFc.filename(), "minimal_fc.fbz");
+        assert_eq!(ZooModel::YoloVoc.filename(), "yolo_voc.fbz");
     }
 
     #[test]
     fn test_zoo_model_all_count() {
-        assert!(ZooModel::all().len() >= 16);
+        assert!(ZooModel::all().len() >= 28);
     }
 
     #[test]
@@ -761,7 +900,6 @@ mod tests {
         let paths = zoo.init_neurobench_stubs().unwrap();
 
         assert!(!paths.is_empty());
-        assert!(zoo.has_model(ZooModel::DvsGesture));
         assert!(zoo.has_model(ZooModel::DsCnnKws));
         assert!(zoo.has_model(ZooModel::EcgAnomaly));
     }
@@ -800,7 +938,7 @@ mod tests {
     fn model_path_errors_when_missing() {
         let temp_dir = TempDir::new().unwrap();
         let zoo = ModelZoo::new(temp_dir.path()).unwrap();
-        let err = zoo.model_path(ZooModel::ViTTiny).unwrap_err();
+        let err = zoo.model_path(ZooModel::AkidaNetImagenet).unwrap_err();
         assert!(err.to_string().contains("not available"));
     }
 
@@ -854,13 +992,13 @@ mod tests {
     #[test]
     fn model_zoo_indexes_invalid_fbz_then_reference_fixes_magic() {
         let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path().join(ZooModel::ViTTiny.filename());
+        let path = temp_dir.path().join(ZooModel::GxnorMnist.filename());
         fs::write(&path, b"not a flatbuffer").unwrap();
         let mut zoo = ModelZoo::new(temp_dir.path()).unwrap();
-        assert!(zoo.has_model(ZooModel::ViTTiny));
-        assert!(!zoo.model_metadata(ZooModel::ViTTiny).unwrap().is_valid);
-        zoo.create_reference_model(ZooModel::ViTTiny).unwrap();
-        assert!(zoo.model_metadata(ZooModel::ViTTiny).unwrap().is_valid);
+        assert!(zoo.has_model(ZooModel::GxnorMnist));
+        assert!(!zoo.model_metadata(ZooModel::GxnorMnist).unwrap().is_valid);
+        zoo.create_reference_model(ZooModel::GxnorMnist).unwrap();
+        assert!(zoo.model_metadata(ZooModel::GxnorMnist).unwrap().is_valid);
     }
 
     #[test]

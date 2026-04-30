@@ -19,7 +19,7 @@ homepage     = "https://github.com/syntheticChemistry/rustChip"
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unsafe_op_in_unsafe_fn = "deny"
-missing_docs = "warn"
+missing_docs = "deny"
 # Benchmark binaries keep optional metrics and scaffolding that are not always exercised.
 dead_code = "allow"
 
@@ -81,6 +81,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # compression
 snap = "1"
+
+# hashing
+sha2 = "0.10"
+
+# weight import
+safetensors = "0.5"
+onnx-rs = "0.1"
+
+# serialization
+flatbuffers = "25"
 
 # data
 bytes    = "1.11"

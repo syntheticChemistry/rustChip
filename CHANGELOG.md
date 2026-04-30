@@ -1,236 +1,149 @@
 # Changelog
 
-## [0.2.0] — 2026-04-05
+All notable changes to this project will be documented in this file.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Changed (Grade A Sprint)
-- Clippy: 828 → 0 warnings (workspace cast allows, source fixes)
-- Tests: 0 → 237 test functions across all 5 crates
-- Coverage: 60.8% (software-testable; hardware VFIO/mmap excluded)
-- 31 unsafe blocks documented with // SAFETY: comments
-- deny(unsafe_op_in_unsafe_fn) enforced
-- Refactored: vfio split (ioctls.rs, container.rs), hybrid split (software.rs)
-- Mock evolution: create_stub_model → create_reference_model, SoftSystemBackend → SoftwareBackend
-- tarpaulin.toml with fail-under=60.0 and hardware excludes
-
----
-
-## [Unreleased] — SRAM access + deep-debt evolution (Mar 2026)
-
-### Key additions
-
-- **Direct SRAM read/write**: Full BAR0 register dump and BAR1 memory-mapped access to all
-  on-chip SRAM. Two independent paths: userspace (`SramAccessor` via sysfs mmap) and VFIO
-  (`VfioBackend::map_bar1()` + `read_sram_u32` / `write_sram_u32`).
-- **Runtime capability discovery**: `Capabilities::from_bar0()` reads NP count, SRAM size,
-  and mesh topology from BAR0 registers. No hardcoded silicon assumptions.
-- **NpuBackend SRAM evolution**: `verify_load()`, `mutate_weights()`, `read_sram()` added
-  to the `NpuBackend` trait with `LoadVerification` struct for model integrity checks.
-- **Zero-unsafe I/O**: `IoHandle` refactored to `rustix::fd::BorrowedFd` — no `unsafe` blocks.
-- **Typed errors**: `anyhow` removed from all library crates. `AkidaError` used throughout.
-- **11 new tests**: ESN determinism (3), parser round-trip (8).
-
-### Added — crates
-
-**`crates/akida-chip`**
-- `src/sram.rs` — `SramKind` (Filter/Threshold/Event/Status), `SramRegion`, `Bar1Layout`
-  (per-NP stride, region offset calculation), `ProbePoint`, `ProbeResult`. Dynamic layout
-  via `from_np_count()`, `from_discovered()`, and `akd1000()` factory.
-
-**`crates/akida-driver`**
-- `src/sram.rs` — `SramAccessor`: BAR0 register R/W, BAR1 SRAM R/W, multi-point probe,
-  range scan. `discover_layout()` reads NP_COUNT and SRAM region registers from BAR0
-  to construct `Bar1Layout` dynamically.
-- `src/tenancy.rs` — `MultiTenantDevice`, `ProgramSlot`: NP slot management, model loading
-  at arbitrary NP offsets, SRAM-backed cross-slot isolation verification.
-- `src/evolution.rs` — `NpuEvolver`, `WeightPatch`, `EvolutionConfig`, `FitnessEvaluator`
-  trait: online weight evolution via direct SRAM mutation (zero-DMA path).
-- `src/puf.rs` — `PufSignature`, `PufConfig`, `measure_puf()`, `puf_entropy()`,
-  `puf_hamming_distance()`: device fingerprinting via int4 quantization noise.
-- `src/sentinel.rs` — `DriftMonitor`, `DriftAlert`, `DriftConfig`, `AdaptiveRecovery`:
-  EWMA-based domain-shift detection with automatic weight re-evolution or model reload.
-- `src/backend.rs` — `NpuBackend` trait: `verify_load()`, `mutate_weights()`, `read_sram()`
-  with default implementations. `LoadVerification` struct.
-- `src/capabilities.rs` — `Capabilities::from_bar0()`, `MeshTopology::from_bar0()`:
-  runtime NP count, SRAM size, enabled-NP bitmask from BAR0 registers.
-- `src/vfio/mod.rs` — `VfioBackend::map_bar1()`, `read_sram_u32()`, `write_sram_u32()`,
-  `has_sram_mapped()`, `sram_size()`: direct BAR1 SRAM access via VFIO mapped memory.
-- `src/loading.rs` — `ModelLoader::verify_with_sram()`: model load integrity via readback.
-
-**`crates/akida-models`**
-- `src/builder.rs` — `ProgramBuilder`, `LayerSpec`, `QuantConfig`, `EsnProgramBuilder`:
-  layer-by-layer FlatBuffer program construction for custom model creation.
-
-**`crates/akida-bench`**
-- `probe_sram` binary — 3-mode SRAM diagnostic tool:
-  - `probe` (default): read-only BAR0 register dump + BAR1 region probe
-  - `scan`: deep scan for non-zero data across full BAR1 address space
-  - `test`: destructive write/readback verification
-- `bench_bar.rs` — evolved: now includes actual MMIO BAR0 register probing via `SramAccessor`
-- `bench_exp002_tenancy.rs` — Phase 2 (`--hw`): SRAM isolation probe, NP enable bits,
-  BAR1 boundary verification
-
-### Changed
-
-- `IoHandle` — zero-unsafe: uses `BorrowedFd<'fd>` via `rustix` instead of raw `RawFd`
-- `AkidaDevice` — constructs `IoHandle` on-demand (no stored raw fd)
-- `setup.rs` — migrated from `anyhow::{bail, Context, Result}` to `AkidaError`
-- `akida-models/Cargo.toml` — removed `nom`, `byteorder`, `anyhow`
-- `akida-driver/Cargo.toml` — removed `anyhow`
-- `inference.rs` — `io_shapes()` dynamically extracts from layer metadata (no hardcoded shapes)
-- `parser.rs` — `estimate_layer_count()` uses FlatBuffers root table traversal
-- `akida-bench/src/lib.rs` — centralized `HardwareProbe`, `Xoshiro`, `BenchTimer`
-- Benchmark binaries — use `HardwareProbe` for capability-based device discovery
-
-### Tests added
-
-- `crates/akida-driver/tests/esn_determinism.rs` — 3 tests: deterministic reservoir,
-  identical output across runs, spectral radius sensitivity
-- `crates/akida-models/tests/parser_roundtrip.rs` — 8 tests: FlatBuffer header parsing,
-  model metadata, IO shape extraction, zoo model validation
-
----
-
-## [Unreleased] — Phase 1 experiment validation + novel systems (Feb 27, 2026)
-
-### Key finding
-- **Tanh constraint discovered**: AKD1000 bounded ReLU breaks ESN reservoir dynamics with
-  random initialization. Documented in `whitePaper/explorations/TANH_CONSTRAINT.md`.
-  Fix: `HybridEsn` — hardware matrix multiply + host tanh recovery. No MetaTF required.
-- **NP address correction**: 7-system packing table had off-by-4–44 hex address errors
-  (cumulative rounding). Corrected to exact cumulative sums in all docs and bench binaries.
-
-### Added — crates
-
-**`crates/akida-driver`**
-- `src/hybrid.rs` — `HybridEsn`, `EsnSubstrate` trait, `EsnWeights`, `SubstrateSelector`,
-  `SubstrateMode`, `SubstrateInfo`. Substrate-agnostic ESN executor for hotSpring/toadStool.
-  - `SubstrateMode::PureSoftware` — CPU f32 + tanh (always available, 800 Hz)
-  - `SubstrateMode::HardwareLinear` — Approach B: scale trick + host tanh (Phase 1 emulated,
-    Phase 2 hardware dispatch pending `metalForge/experiments/004_HYBRID_TANH`)
-  - `SubstrateMode::HardwareNative` — bounded ReLU for MetaTF-designed weights
-  - `ScaleTrickConfig` — auto-computes ε via 3σ statistical bound
-  - `HardwareEsnExecutor::step_linear_emulated()` — working Approach B math (not a stub)
-- `examples/vfio_bind.rs` — VFIO bind/unbind helper + status check
-
-**`crates/akida-models`**
-- `examples/program_external.rs` — demonstrates `program_external()` NP address semantics
-
-**`crates/akida-bench`**
-- `bench_exp002_tenancy.rs` — Exp 002 Phase 1: NP layout, address isolation, reload fidelity,
-  weight mutation isolation, 2→4→7 packing progression (all ✅)
-- `bench_exp004_hybrid_tanh.rs` — Exp 004 Phase 1: Approach B accuracy, linear region check,
-  throughput comparison, ε sweep, determinism (all ✅)
-- `run_experiments.rs` — unified runner: Exp 002 + 003 (E3.1+E3.6) + 004, structured pass/fail
-  with hardware/software substrate notes. Run: `cargo run --bin run_experiments`
-- `bench_multi_tenancy.rs` — multi-tenancy simulation (N systems, round-robin throughput)
-- `bench_online_evolution.rs` — 136 gen/sec evolution simulation
-- `bench_hw_sw_parity.rs` — HW vs SW capability matrix: throughput, energy, activation
-
-### Added — docs / baseCamp / metalForge
-
-**`specs/`**
-- `AI_CONTEXT.md`, `SILICON_SPEC.md`, `DRIVER_SPEC.md`, `PHASE_ROADMAP.md`, `INTEGRATION_GUIDE.md`
-
-**`baseCamp/systems/`**
-- `README.md` — 7-system NP packing table (814/1,000 NPs, corrected addresses)
-- `multi_tenancy.md`, `online_evolution.md`, `npu_conductor.md` — novel NPU architectures
-- `hybrid_executor.md` — HybridEsn design doc
-- `hw_sw_comparison.md` — AKD1000 vs SoftwareBackend capability matrix
-- `chaotic_attractor.md`, `temporal_puf.md`, `adaptive_sentinel.md` — novel applications
-- `neuromorphic_pde.md`, `physics_surrogate.md` — physics computing on NPU
-
-**`baseCamp/models/edge/beyond_sdk/`**
-- `akidanet_beyond.md`, `kws_beyond.md`, `ecg_beyond.md`, `dvs_beyond.md`, `detection_beyond.md`
-- Extended capabilities for each BrainChip SDK claimed use case
-
-**`metalForge/experiments/`**
-- `002_MULTI_TENANCY.md` — updated: Phase 1 results section added, corrected NP addresses
-- `003_BEYOND_CLAIMED.md` — extended SDK capability validation protocol
-- `004_HYBRID_TANH.md` — updated: Phase 1 results added, Approach B implemented
-
-**`whitePaper/`**
-- `explorations/TANH_CONSTRAINT.md` — full analysis of bounded ReLU constraint + fix
-- `explorations/VFIO_VS_KMOD.md`, `explorations/GPU_NPU_PCIE.md`, `explorations/RUST_AT_SILICON.md`
-- `outreach/akida/TECHNICAL_BRIEF.md` — updated with Discovery 11 (bounded ReLU) + hardware fix paths
-- `outreach/akida/BENCHMARK_DATASHEET.md` — updated Section 10: activation constraint + hybrid
-
-### Changed
-- `README.md` — full rewrite: complete directory structure, novel systems, quick-start section,
-  HybridEsn example, "For BrainChip engineers" section
-- `specs/AI_CONTEXT.md` — added baseCamp/metalForge patterns, HybridEsn guidance
-
----
-
-## [Initial] — divergent evolution from Brainchip-Inc/akida_dw_edma
+## [Unreleased]
 
 ### Added
 
-**`crates/akida-chip`** — silicon model crate (no dependencies)
-- `pcie`: vendor/device IDs for AKD1000 (`0x1E7C:0xBCA1`) and AKD1500 (`0x1E7C:0xA500`)
-- `bar`: BAR layout (BAR0 16 MB, BAR1 16 GB NP mesh window, BAR3 32 MB)
-- `regs`: BAR0 register map — confirmed addresses from direct probing + C++ symbol analysis
-- `mesh`: NP mesh topology (5×8×2, 78 functional, SkipDMA routing model)
-- `program`: FlatBuffer `program_info` / `program_data` format (reverse-engineered)
-
-**`crates/akida-driver`** — full pure Rust driver
-- VFIO backend: complete DMA (mlock, IOVA mapping, scatter-gather), BAR0 MMIO,
-  inference trigger/poll, power measurement via hwmon
-- Kernel backend: `/dev/akida*` read/write (fallback when C module present)
-- Userspace backend: BAR mmap, development/register probing
-- `vfio::bind_to_vfio()` / `unbind_from_vfio()` — replace C `install.sh`
-- `vfio::iommu_group()` — IOMMU group discovery from sysfs
-- Runtime capability discovery: `MeshTopology`, `ClockMode`, `BatchCapabilities`,
-  `WeightMutationSupport`, `PcieConfig` — all from sysfs, nothing hardcoded
-- Phase C sovereign driver: direct ioctl/mmap on `/dev/akida0` (Feb 26, 2026)
-
-**`crates/akida-models`** — FlatBuffer model layer
-- `.fbz` parser (FlatBuffer + Snappy)
-- `program_external()` path: direct program binary injection, bypass SDK compilation
-- Model zoo: ESN readout, transport predictor, phase classifier
-
-**`crates/akida-bench`** — BEYOND_SDK reproduction suite
-- `bench_channels` — Discovery 1: any input channel count works (1–64)
-- `bench_fc_depth` — Discovery 2: FC chains merge via SkipDMA (8 layers ≈ 2 layers)
-- `bench_batch` — Discovery 3: batch=8 sweet spot (390 µs/sample, 2.4× speedup)
-- `bench_clock_modes` — Discovery 4: Economy = 19% slower, 18% less power
-- `bench_fc_width` — Discovery 5: PCIe-dominated below 512 neurons
-- `bench_weight_mut` — Discovery 6: weight mutation overhead ~14 ms
-- `bench_dma` — Production: 37 MB/s sustained DMA
-- `bench_latency` — Production: 54 µs / 18,500 Hz single inference
-- `bench_bar` — Discovery 8: BAR layout probe (16 GB BAR1)
-
-**`crates/akida-cli`** — `akida` command-line tool
-- `akida enumerate` — list all devices with capabilities
-- `akida info <addr>` — detailed single-device info including IOMMU group
-- `akida bind-vfio <addr>` — bind to vfio-pci
-- `akida unbind-vfio <addr>` — unbind and re-bind to akida driver
-- `akida iommu-group <addr>` — show IOMMU group and /dev/vfio path
-
-**Docs**
-- `docs/BEYOND_SDK.md` — 10 hardware discoveries, raw measurements
-- `docs/HARDWARE.md` — NP mesh architecture, BAR layout, per-NP capabilities
-- `docs/TECHNICAL_BRIEF.md` — production use in lattice QCD (Exp 022)
-- `docs/BENCHMARK_DATASHEET.md` — complete measurement dataset
-- `docs/DEPRECATED.md` — migration guide from C kernel module to Rust VFIO path
+- **glowplug absorption** — VFIO device lifecycle management (bind, warm boot,
+  tear down) absorbed from coralReef's ember/glowplug. rustChip now manages its
+  own hardware lifecycle without external orchestrator or kernel module. Code is
+  derivative of the ecoPrimals ecosystem and retains the full scyBorg license
+  under the lineage principle.
+- **HW/SW backend separation** — `VfioBackend` [HW] and `SoftwareBackend` [SW]
+  are explicitly labeled and never conflated. `BackendSelection` enum and
+  `select_backend()` function provide the composition entry point.
+- **Narrative explorations** — four new whitePaper documents grounding NPU science
+  in hardware evidence:
+  - `WHY_NPU.md` — the foundational neuromorphic argument
+  - `SPRINGS_ON_SILICON.md` — 5 NPU patterns × 3 science domains
+  - `NPU_FRONTIERS.md` — 10 creative frontiers for neuromorphic hardware
+  - `NPU_ON_GPU_DIE.md` — NPU as a GPU functional unit (area/power analysis)
+- **5 standalone science demos** — self-contained binaries reproducing
+  peer-reviewed NPU science claims without external data:
+  - `science_lattice_esn` — Hybrid ESN for Lattice QCD steering
+  - `science_bloom_sentinel` — Streaming Sentinel for harmful algal bloom detection
+  - `science_spectral_triage` — Microsecond Gatekeeper for LC-MS spectral triage
+  - `science_crop_classifier` — Online Adaptation via (1+1)-ES for seasonal crop stress
+  - `science_precision_ladder` — Precision Discipline: f64 → f32 → int8 → int4
+- **warm boot binary** — `warm_boot` demonstrates sovereign device lifecycle
+  using the absorbed glowplug module.
+- **Experiment 006** — BAR0 Register Probe: true layout discovery on cold-boot
+  VFIO-bound AKD1000 (80 NPs, 10 MB SRAM confirmed via pure userspace probing).
 
 ### Changed
 
-- `akida-pcie-core.c` and related C files: marked deprecated. Kept at root
-  for upstream reference; not part of the Rust build.
+- **scyBorg licensing update** — AGPL-3.0-or-later (code) + ORC (game mechanics)
+  + CC-BY-SA 4.0 (creative/docs). Lineage principle: code absorbed from
+  ecoPrimals retains full scyBorg license even within the BrainChip exception
+  boundary. Akida-specific code exempt; systems endowed from ecoPrimals are not.
+- Test count: 353 → 367 (new science demos, glowplug module).
+- Zoo model count corrected: 29 → 28 (actual `ZooModel` enum variants).
 
-### Removed
+## [0.1.0] — 2026-04-30
 
-- Dependency on Python SDK (MetaTF) — replaced by `akida-models` FlatBuffer parser
-- Dependency on C++ libakida.so — replaced by direct VFIO + register access
-- Dependency on kernel module for operation — VFIO backend requires no C code
+First versioned release. 353 tests passing, 29-model zoo, pure Rust
+conversion pipeline, guideStone validation, CI, full documentation suite.
 
----
+### Added
 
-## Origin — Brainchip-Inc/akida_dw_edma (master)
+- **Pure Rust model pipeline** — complete replacement for Python SDK dependency.
+  Models can now be created, quantized, serialized, and parsed entirely in Rust:
+  - `akida-models::quantize` — per-layer and per-channel int1/2/4/8 symmetric
+    quantization with nibble packing and round-trip verification (14 tests).
+    Algorithm patterns absorbed from neuralSpring and hotSpring.
+  - `akida-models::import` — weight import from `.npy`, `.safetensors`, and raw
+    f32 slices with hand-rolled `.npy` parser and f16/bf16 upcast (16 tests).
+    safetensors pattern absorbed from neuralSpring.
+  - `akida-models::schema` — reverse-engineered FlatBuffer serializer matching
+    the structure observed across all 25 `.fbz` artifacts. Produces valid
+    Snappy-compressed FlatBuffers that round-trip through the parser (5 tests).
+  - `akida-models::schema_parser` — schema-aware FlatBuffer parser using vtable
+    navigation instead of heuristic byte scanning. Extracts version, layer names,
+    and properties via proper field offsets (6 tests).
+  - `akida convert` CLI command — end-to-end conversion: import weights from
+    `.npy`/`.safetensors`/`zeros:N`/`random:N`, quantize, serialize via
+    FlatBuffer, compress, write `.fbz`, verify round-trip. No Python.
+  - `.fbs` schema at `crates/akida-models/schemas/akida_model.fbs` documents the
+    reverse-engineered format.
+- **New dependencies**: `flatbuffers = "25"`, `safetensors = "0.5"` (both pure
+  Rust, no C/Python/vendor SDK).
+- **guideStone computational artifact** — `akida guidestone [dir]` runs a
+  self-leveling validation: parses 25 models (21 BrainChip zoo + 4 physics),
+  computes SHA-256 digests, validates structure (version, layers, decompression
+  ratio, NP budget, weight blocks, file size), benchmarks parse throughput
+  (15.8 MB/s), and emits a graded report (225 checks, 0 failures). Implemented
+  in `crates/akida-models/src/guidestone.rs`. Any subsequent work on this
+  build can reference the guideStone run as the anchored baseline.
+- **guideStone documentation** — `specs/GUIDESTONE.md` maps the ecoPrimals
+  guideStone verification class (5 properties) to NPU compute.
+  `baseCamp/GUIDESTONE_CERTIFICATION.md` tracks certification progress.
+- **baseCamp documentation suite** — `ZOO_GUIDE.md` (comprehensive model
+  zoo guide with all 25 models, Rust ecosystem integration, and what it
+  unlocks), `SCIENTIFIC_DEPLOYMENT.md` (whitepaper-style NPU deployment
+  guide for scientific/data workloads with production results and deployment
+  patterns), `RUST_NPU_ECOSYSTEM.md` (what the Rust NPU ecosystem enables
+  and how rustChip fits).
+- **Full BrainChip model zoo export** — `scripts/export_zoo.py` exports all 21
+  pretrained models from the Akida SDK (v2.19.1) to `.fbz` with a ground-truth
+  `zoo_manifest.json`. Python SDK is a one-time validation oracle, not a runtime
+  dependency.
+- **Physics model export** — `scripts/export_physics.py` generates `.fbz` files
+  for the 4 ecoPrimals physics models (ESN readout, phase classifier, transport
+  predictor, Anderson classifier) with random weights matching documented
+  architectures.
+- **Zoo regression test suite** — `crates/akida-models/tests/zoo_regression.rs`
+  validates that all 25 `.fbz` files (21 zoo + 4 physics) parse successfully.
+  Run with `cargo test --test zoo_regression -- --ignored`.
+- **CLI model commands** — `akida parse <file.fbz>` inspects model structure;
+  `akida zoo-status [dir]` shows cache status against the full `ZooModel` enum.
+- **Spring profiles catalog** — `baseCamp/spring-profiles/README.md` documents
+  every NPU workload across ecoPrimals springs with reproducible instructions.
+- **`Model::input_shape()` / `output_shape()`** — shape accessors on the parsed
+  model, populated via `set_shapes()` from manifest metadata.
+- **`ZooModel` enum expanded to 28 variants** — covers all 21 BrainChip
+  MetaTF models, 2 NeuroBench benchmarks, 4 ecoPrimals physics models, and 1
+  hand-built test. Filenames match actual export output.
+- **`ZooModel::brainchip_zoo()`** — convenience accessor for the 21 MetaTF models.
+- **`ModelTask::FaceAnalysis`, `Segmentation`, `EyeTracking`** — new task
+  categories for the expanded model catalog.
 
-The original repository contained:
-- `akida-pcie-core.c` — Linux PCIe driver wrapping DesignWare eDMA controller
-- `install.sh` — kernel module build and load script
-- `build_kernel_w_cma.sh` — custom kernel build for CMA support (AKD1500)
+### Changed
 
-These files are preserved at the repository root unchanged.
+- **`ModelZoo::load_metadata`** now parses files via `Model::from_bytes()` to
+  determine validity, version, and layer count. The old magic-byte check
+  (`[0x80, 0x44, 0x04, 0x10]`) rejected all real zoo `.fbz` files.
+- **`ValidationTier::Functional`** assigned to all 21 MetaTF zoo models
+  (exported + parsed successfully).
+
+### Fixed
+
+- `ModelZoo::load_metadata` no longer marks real `.fbz` files as invalid.
+- `baseCamp/conversion/README.md` no longer references non-existent `quantize.rs`.
+- `baseCamp/zoos/brainchip_metatf.md` updated with actual export results.
+
+### Added (0.1.0 release hardening)
+
+- **QUICKSTART.md** — 5-command onboarding: clone, build, convert, parse, test.
+- **LEVERAGE.md** — standalone tool leverage guide following wateringHole pattern.
+- **Nature Preserve** — `baseCamp/preserve/` with 7 domain application patterns
+  (physics, biology, audio, vision, environmental, genomic, industrial).
+- **4 Rust-native zoo models** — ESN multi-head, ESN 3-head transport, streaming
+  sensor 12ch, adaptive sentinel. Generated via pure Rust `akida convert`.
+- **NPU_LEVERAGE.md** added to hotSpring, wetSpring, neuralSpring.
+- **sporePrint science page 27** — Nature Preserve: Applied NPU Science.
+- **wateringHole** — rustChip entry in `LEVERAGE_GUIDES.md` (v1.1.0), NPU
+  onboarding section in `GARDEN_COMPOSITION_ONRAMP.md`.
+- **CONTRIBUTING.md** — quality commands, layout, workflow.
+- **CITATION.cff** — machine-readable citation metadata.
+- **CONTEXT.md** — AI/indexer context following `PUBLIC_SURFACE_STANDARD`.
+- **CI workflows** — `.github/workflows/ci.yml` with fmt, clippy, test, doc, deny.
+- **TOLERANCE_REGISTRY.md** — named numerical tolerances across all subsystems.
+- **justfile** — common workflow commands (`just check`, `just test`, `just guidestone`).
+- **.cursor/rules/rustchip.md** — project-level AI guidance.
+- **16 new tests** — 8 in akida-cli (arch parser), 8 in akida-bench (PRNG, timer, probe).
+- README header reformatted to match `SPRING_PRIMAL_PRESENTATION_STANDARD`
+  (Date, License, MSRV, Status with metrics).

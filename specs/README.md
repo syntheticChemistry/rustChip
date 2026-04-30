@@ -1,7 +1,7 @@
 # rustChip Specifications
 
-**Last Updated**: March 4, 2026
-**Status**: Phase D active — SRAM access complete, `cargo check` clean
+**Last Updated**: April 29, 2026
+**Status**: Phase D active — toadStool hardening port complete, FBZ parser fixed
 **Crates**: akida-chip 0.1.0, akida-driver 0.1.0, akida-models 0.1.0,
            akida-bench 0.1.0, akida-cli 0.1.0
 
@@ -16,9 +16,9 @@
 | akida-driver (SRAM) | ✅ Complete | SramAccessor, Capabilities::from_bar0, NpuBackend SRAM methods |
 | akida-driver (kernel) | ✅ Fallback | /dev/akida* when C module loaded |
 | akida-driver (systems) | ✅ Scaffolded | tenancy, evolution, PUF, sentinel modules |
-| akida-models | ✅ Functional | FlatBuffer parser, ProgramBuilder, model zoo |
+| akida-models | ✅ Functional | Snappy + FlatBuffer parser, ProgramBuilder, model zoo |
 | akida-bench | ✅ 12 bins | 10 BEYOND_SDK + probe_sram + Phase 2 benchmarks |
-| akida-cli | ✅ Functional | enumerate, info, bind-vfio, unbind-vfio, iommu-group |
+| akida-cli | ✅ Functional | enumerate, info, bind-vfio, unbind-vfio, iommu-group, setup, verify |
 | docs/ | ✅ Complete | BEYOND_SDK, HARDWARE, TECHNICAL_BRIEF, BENCHMARK_DATASHEET |
 | `docs/DEPRECATED.md` | ✅ | C kernel module clearly marked, migration path documented |
 
@@ -32,6 +32,8 @@
 | [`DRIVER_SPEC.md`](DRIVER_SPEC.md) | Driver architecture: backend hierarchy, VFIO requirements, API contract |
 | [`PHASE_ROADMAP.md`](PHASE_ROADMAP.md) | Sovereign driver roadmap Phase A–E, what's done, what's next |
 | [`INTEGRATION_GUIDE.md`](INTEGRATION_GUIDE.md) | Using rustChip in a downstream project; GPU+NPU co-location pattern |
+| [`EVOLUTION.md`](EVOLUTION.md) | Identity, toadStool relationship, ported work, remaining evolution |
+| [`GUIDESTONE.md`](GUIDESTONE.md) | guideStone verification class: five properties applied to NPU compute, certification path |
 | [`AI_CONTEXT.md`](AI_CONTEXT.md) | For AI developer context: conventions, extension patterns, crate graph |
 
 ---
@@ -44,10 +46,12 @@
 - Fallback backend: C kernel module (when already installed)
 - Direct SRAM read/write via BAR0 registers and BAR1 memory mapping
 - Runtime capability discovery from BAR0 (no sysfs attributes needed)
-- FlatBuffer model format parser, ProgramBuilder, and injection
+- Snappy-compressed `.fbz` decompression and FlatBuffer model format parser
+- `ProgramBuilder` for hand-crafted FlatBuffer injection
 - Novel system scaffolds: multi-tenancy, evolution, PUF, drift monitor
+- `SyntheticNpuBackend` for CI testing without hardware (`test-mocks` feature)
 - Benchmark suite reproducing all 10 BEYOND_SDK hardware discoveries + SRAM probe
-- Command-line tool for hardware enumeration, info, and VFIO management
+- CLI tool: hardware enumeration, info, VFIO management, setup, and verification
 
 ### rustChip IS NOT:
 - A Python SDK (that is BrainChip's MetaTF)
@@ -66,9 +70,10 @@
 ## Philosophy
 
 This project is a **fruiting body** — a self-contained expression of the
-ecoPrimals methodology, designed to be handed to another team and function
-independently. Like a spore, it carries everything it needs to establish
-a new colony:
+[ecoPrimals](https://github.com/ecoPrimals) methodology
+([primals.eco](https://primals.eco)), designed to be handed to another
+team and function independently. Like a spore, it carries everything it
+needs to establish a new colony:
 
 - Code that compiles and runs
 - Hardware measurements that justify every design decision
@@ -95,6 +100,10 @@ for upstream reference. We don't erase history; we evolve past it.
 1. `AI_CONTEXT.md` — conventions, crate graph, SRAM patterns, extension patterns
 2. `SILICON_SPEC.md` — what the hardware actually is (including SRAM types)
 3. `DRIVER_SPEC.md` — how the driver is structured (including SRAM access layer)
+
+**Understanding verification and reproducibility**:
+1. `GUIDESTONE.md` — how guideStone applies to NPU compute
+2. `../baseCamp/GUIDESTONE_CERTIFICATION.md` — living checklist, current status
 
 **Engineer evaluating this for integration**:
 1. This README (5 min)

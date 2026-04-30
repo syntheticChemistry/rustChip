@@ -11,7 +11,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-akida-driver = { git = "https://github.com/ecoPrimal/rustChip" }
+akida-driver = { git = "https://github.com/syntheticChemistry/rustChip" }
 ```
 
 Or path-reference if vendored:
@@ -93,12 +93,36 @@ Total NPU overhead:              ~70–430 µs  (0.07–0.43 ms)
 For workloads where GPU trajectory takes ~7 s (e.g. lattice QCD HMC), the
 NPU overhead is 0.006% of wall time. That's the operating point for Exp 022.
 
-### Connecting to toadStool / barracuda (if you use it)
+### Connecting to the sovereign compute trio
 
-If your GPU code runs through toadStool's `barracuda` crate:
+rustChip is a standalone extraction from the sovereign compute pipeline.
+The full pipeline has three primals that form the node's atomic structure:
+
+```
+coralReef (HOW — compile)
+  Sovereign GPU compiler: WGSL/SPIR-V/GLSL → native NVIDIA/AMD.
+  No LLVM, no Mesa, no vendor SDK.
+  VFIO passthrough via ember/glowplug architecture.
+      ↓  [compiled shader → toadStool dispatch queue]
+toadStool (WHERE — dispatch)
+  GPU/NPU/CPU discovery, tolerance-based routing, NpuBackendDispatch.
+  Decides which device runs which workload.
+      ↓  [dispatch decision → barraCuda or rustChip]
+barraCuda (WHAT — compute)                    rustChip (WHAT — infer)
+  900+ WGSL shaders, DF64, QCD, FHE.           NPU inference, SRAM, VFIO.
+  Produces feature vectors as &[f32].           Consumes &[f32], returns &[f32].
+      ↓                                             ↓
+  [GPU result → host memory]                   [NPU result → host memory]
+      └──────────── merge on CPU ───────────────────┘
+```
+
+For ecosystem context, see [primals.eco](https://primals.eco) and
+[specs/EVOLUTION.md](EVOLUTION.md).
+
+**Integration with barraCuda** — if your GPU code runs barraCuda shaders:
 
 ```rust
-// GPU side (your barracuda code — NOT in this repo)
+// GPU side (barraCuda code — NOT in this repo)
 let features = barracuda::run_observable_shader(&device, &config)?;
 
 // NPU side (this repo — standalone)
@@ -108,11 +132,56 @@ let mut npu_exec = akida_driver::InferenceExecutor::new(
 let phase_label = npu_exec.run(&features, Default::default())?;
 ```
 
-The interface point is `&[f32]` — a CPU-resident float slice. That's the
-seam. GPU codebase produces it; this codebase consumes it.
+**Integration with coralReef** — if you use coralReef's sovereign compiler
+instead of vendor GPU drivers, the VFIO passthrough patterns are shared.
+coralReef's `ember`/`glowplug` architecture (fd sharing for HMB2-era GPU
+BAR access) is the same pattern rustChip uses for NPU BAR mapping.
+Downstream projects that already use coralReef's VFIO container can share
+the IOMMU context with rustChip's VFIO backend:
 
-No import from toadStool needed. No toadStool dep in `Cargo.toml`. The
+```rust
+// coralReef opens the VFIO container for GPU access
+let container_fd = coralreef::vfio::open_container()?;
+
+// rustChip can join the same IOMMU context (future: shared container API)
+// Today: independent containers, same VFIO pattern, same udev rules
+let npu_backend = akida_driver::select_backend(
+    BackendSelection::Vfio,
+    "0000:e2:00.0",
+)?;
+```
+
+**Integration with toadStool** — toadStool's `NpuBackendDispatch` already
+understands how to route work to NPU backends. rustChip's `NpuBackend`
+trait is extracted from toadStool's — they are ABI-compatible by design.
+
+The interface point is always `&[f32]` — a CPU-resident float slice. That's
+the seam. No import from any trio member is needed in `Cargo.toml`. The
 integration is a runtime data handoff, not a compile-time dependency.
+
+### Using `test-mocks` for downstream integration tests
+
+If you depend on `akida-driver` and want to run integration tests without
+hardware or the full `SoftwareBackend` simulation, enable the `test-mocks`
+feature:
+
+```toml
+[dev-dependencies]
+akida-driver = { git = "https://github.com/syntheticChemistry/rustChip", features = ["test-mocks"] }
+```
+
+This exposes `SyntheticNpuBackend` — a minimal deterministic mock that
+implements `NpuBackend`, always returns input as output, and reports ready
+immediately. It is suitable for testing dispatch logic and data plumbing,
+not numerical correctness.
+
+```rust
+use akida_driver::SyntheticNpuBackend;
+
+let mut backend = SyntheticNpuBackend::coverage_default();
+let output = backend.infer(&[1.0, 2.0, 3.0])?;
+assert_eq!(output, vec![1.0, 2.0, 3.0]); // identity — input == output
+```
 
 ---
 
@@ -274,6 +343,8 @@ cargo run --bin probe_sram -- test      # write/readback test (destructive)
 | Python bindings | Not planned — use akida-cli as subprocess |
 | Windows support | Not planned (VFIO is Linux-specific) |
 
-The GPU portion of the heterogeneous pipeline — the WGSL lattice QCD shaders,
-the BarraCuda physics engine, the heterogeneous dispatch system — lives in
-a separate repository. This repo is the NPU half only. The interface is `&[f32]`.
+The GPU portion of the heterogeneous pipeline lives in the sovereign compute trio:
+[barraCuda](https://github.com/ecoPrimals/barraCuda) (WGSL shaders and math),
+[coralReef](https://github.com/ecoPrimals/coralReef) (GPU compiler),
+[toadStool](https://github.com/ecoPrimals/toadStool) (dispatch and routing).
+This repo is the NPU half only. The interface is `&[f32]`.

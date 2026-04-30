@@ -1,0 +1,37 @@
+// Reverse-engineered FlatBuffer schema for Akida .fbz model files.
+//
+// Derived from binary analysis of 25 models across the BrainChip MetaTF
+// model zoo (v2, SDK 2.19.1) and 4 ecoPrimals physics models.
+//
+// Observed structure (consistent across all 25 artifacts):
+//   Root table at offset 0x10, VTable at 0x06
+//   VTable: size=10, table_size=12, 3 fields
+//
+// This schema is used for documentation. The Rust serializer in
+// schema.rs uses the flatbuffers builder API directly.
+
+namespace akida;
+
+table PropertyEntry {
+  key: string;
+  value: long;          // integer properties (weights_bits, units, etc.)
+  string_value: string; // string properties (layer_type, activation, etc.)
+}
+
+table LayerEntry {
+  name: string;
+  properties: [PropertyEntry];
+  weight_data: [ubyte];
+}
+
+table ModelBody {
+  layers: [LayerEntry];
+}
+
+table ModelProgram {
+  body: ModelBody;      // field 0: model structure and layers
+  // field 1: reserved (absent in all observed models)
+  version: string;      // field 2: SDK version string (e.g. "2.19.1")
+}
+
+root_type ModelProgram;

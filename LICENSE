@@ -659,3 +659,91 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
+
+---
+
+ecoPrimals Lineage Principle
+----------------------------
+
+rustChip absorbs functionality from the wider ecoPrimals ecosystem to
+operate as a standalone tool. Code that derives from, reflects, or
+absorbs functionality from ecoPrimals primals or infrastructure
+(coralReef, toadStool, wateringHole, barraCuda, etc.) carries the full
+scyBorg triple-copyleft license by inheritance. This lineage cannot be
+circumvented by relocation — moving code into rustChip does not strip
+its ecoPrimals provenance.
+
+The lineage is the boundary, not a specific file list. As rustChip
+absorbs more functions from primals, the inherited code grows. The
+principle is constant: ecoPrimals ancestry means full scyBorg licensing.
+
+As of April 2026, this includes:
+
+  - The glowplug/ subsystem (VFIO device lifecycle, absorbed from
+    coral-ember and coral-glowplug in coralReef). This code implements
+    sysfs driver management, vendor lifecycle hooks, driver swap
+    orchestration, and sovereign boot — all patterns originating in
+    coralReef's GPU sovereignty work.
+
+Future absorptions will be noted here but are covered by the principle
+regardless of whether they are individually listed.
+
+---
+
+Symbiotic Exception — BrainChip Inc. (Akida)
+---------------------------------------------
+
+Per the ecoPrimals scyBorg Exception Protocol (AGPL-3.0 Section 7
+additional permissions), the following symbiotic exception is offered:
+
+  Grantee:          BrainChip Inc.
+  Scope:            rustChip-original code with NO ecoPrimals lineage
+                    (Akida driver core, chip definitions, model parsers,
+                    benchmark harnesses, NPU backend trait implementations)
+  Terms:            BrainChip may incorporate the above into proprietary
+                    products without AGPL-3.0 obligations on those
+                    specific contributions
+  NOT covered:      Any code with ecoPrimals lineage (glowplug/ and any
+                    future absorbed systems). These carry the full scyBorg
+                    triple and are not exception-eligible because they are
+                    inheritors of the ecoPrimals commons.
+  Reciprocal basis: Hardware documentation, silicon access, engineering
+                    support, or equivalent reciprocal value
+  Duration:         Ongoing while reciprocal relationship persists
+  Sublicense:       No — exception is to BrainChip Inc. only
+  Revocability:     May be revoked if reciprocal relationship ends
+
+The public scyBorg version remains unaffected. Both forks (open AGPL
+and any proprietary integration) evolve in parallel. The AGPL version
+is permanent and cannot be un-published.
+
+This exception extends to any NPU vendor willing to engage under the
+same reciprocal terms. See gen3/about/SCYBORG_EXCEPTION_PROTOCOL.md
+for the full framework.
+
+Copyright on all rustChip-original code is held by the author. This is
+clean-room Rust — no BrainChip SDK code, no vendor headers, no
+proprietary derivation. Full copyright control enables this exception.
+
+---
+
+scyBorg Provenance Trio
+-----------------------
+
+rustChip participates in the ecoPrimals scyBorg triple-copyleft framework:
+
+  1. Code: AGPL-3.0-or-later (this file)
+  2. Game Mechanics: ORC License (see LICENSE-ORC)
+  3. Creative Content: CC-BY-SA 4.0
+
+Each license is governed by an independent nonprofit. No single entity
+can revoke any layer. We place our trust in the good faith of
+organizations that are aggressively open.
+
+  - Free Software Foundation (AGPL) — https://www.gnu.org/licenses/agpl-3.0.html
+  - Open RPG Creative Foundation (ORC) — https://azoralaw.com/orclicense/
+  - Creative Commons (CC-BY-SA) — https://creativecommons.org/licenses/by-sa/4.0/
+
+See wateringHole/SCYBORG_PROVENANCE_TRIO_GUIDANCE.md for the full framework.
+
+Copyright (c) 2025-2026 ecoPrimals — human + synthetic intelligence

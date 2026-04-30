@@ -66,6 +66,7 @@ use crate::capabilities::Capabilities;
 use crate::error::{AkidaError, Result};
 use crate::mmio::{Bar, MappedRegion, regs};
 use container::{VfioContainer, VfioGroup, query_device_info};
+use ioctls::ioctl_vfio_device_reset;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
@@ -217,6 +218,34 @@ impl VfioBackend {
         Ok(())
     }
 
+    /// Read a 32-bit register from BAR0 (control registers) at the given offset.
+    ///
+    /// Provides raw access for register probing and diagnostics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if offset is out of bounds.
+    pub fn read_bar0_u32(&self, offset: usize) -> u32 {
+        self.control_regs.read32(offset)
+    }
+
+    /// Write a 32-bit value to BAR0 (control registers) at the given offset.
+    ///
+    /// **Warning:** Writing to unknown registers can lock up the device.
+    ///
+    /// # Panics
+    ///
+    /// Panics if offset is out of bounds.
+    pub fn write_bar0_u32(&self, offset: usize, value: u32) {
+        self.control_regs.write32(offset, value);
+    }
+
+    /// Get the mapped BAR0 control region size in bytes.
+    #[must_use]
+    pub fn bar0_size(&self) -> usize {
+        self.control_regs.size()
+    }
+
     /// Whether BAR1 SRAM is currently mapped.
     #[must_use]
     pub const fn has_sram_mapped(&self) -> bool {
@@ -238,6 +267,82 @@ impl VfioBackend {
             )));
         }
         Ok(())
+    }
+
+    /// Reset the device and bring it to READY state.
+    ///
+    /// Sequence:
+    /// 1. Try `VFIO_DEVICE_RESET` ioctl (bus-level reset, not all devices support it)
+    /// 2. Write `CONTROL.RESET` to trigger a soft reset
+    /// 3. Poll until `BUSY` clears
+    /// 4. Write `CONTROL.ENABLE` to activate the device
+    /// 5. Poll until `STATUS.READY` is set
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the device fails to reach READY state after polling.
+    pub fn reset_and_enable(&self) -> Result<()> {
+        let pre_status = self.control_regs.read32(regs::STATUS);
+        tracing::info!("Starting device reset-and-enable (pre-STATUS={pre_status:#010x})");
+
+        // Step 1: Try VFIO bus-level reset (best-effort)
+        match ioctl_vfio_device_reset(self.device.as_raw_fd()) {
+            Ok(()) => {
+                tracing::info!("VFIO_DEVICE_RESET succeeded");
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(e) => {
+                tracing::debug!("VFIO_DEVICE_RESET not supported: {e} (continuing with soft reset)");
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+
+        let post_reset_status = self.control_regs.read32(regs::STATUS);
+        tracing::info!("Post bus-reset STATUS={post_reset_status:#010x}");
+
+        // Step 2: Soft reset via CONTROL register
+        tracing::debug!("Writing CONTROL.RESET");
+        self.control_regs.write32(regs::CONTROL, regs::control::RESET);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        let post_soft_status = self.control_regs.read32(regs::STATUS);
+        tracing::info!("Post soft-reset STATUS={post_soft_status:#010x}");
+
+        // Step 3: Enable the device
+        tracing::debug!("Writing CONTROL.ENABLE");
+        self.control_regs.write32(regs::CONTROL, regs::control::ENABLE);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        // Step 4: Poll for READY
+        let polls = self.poll_register(PollConfig {
+            reg: regs::STATUS,
+            done_mask: regs::status::READY,
+            error_mask: regs::status::ERROR,
+            max_polls: 1_000_000,
+            yield_interval: 1_000,
+            timeout_msg: "Device did not reach READY state after enable",
+            error_msg: "Device reported ERROR after enable",
+        });
+
+        let final_status = self.control_regs.read32(regs::STATUS);
+        tracing::info!("Final STATUS={final_status:#010x}");
+
+        match polls {
+            Ok(n) => {
+                tracing::info!("Device READY after {n} polls");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Device not READY after enable: STATUS={final_status:#010x} \
+                     (READY={}, BUSY={}, ERROR={})",
+                    final_status & regs::status::READY != 0,
+                    final_status & regs::status::BUSY != 0,
+                    final_status & regs::status::ERROR != 0,
+                );
+                Err(e)
+            }
+        }
     }
 
     /// Poll a status register until `done_mask` bit is set, returning the poll count.
@@ -301,7 +406,7 @@ impl NpuBackend for VfioBackend {
             capabilities.memory_mb
         );
 
-        Ok(Self {
+        let backend = Self {
             pcie_address: pcie_address.to_string(),
             container: vfio_container.file,
             group: vfio_group.file,
@@ -314,7 +419,15 @@ impl NpuBackend for VfioBackend {
             model_buffer: None,
             next_iova: 0x1000_0000, // Start IOVA at 256MB
             model_loaded: false,
-        })
+        };
+
+        // Bring device to READY state (reset + enable)
+        match backend.reset_and_enable() {
+            Ok(()) => tracing::info!("Device is READY"),
+            Err(e) => tracing::warn!("Device init sequence incomplete: {e} (hardware may need manual init)"),
+        }
+
+        Ok(backend)
     }
 
     fn capabilities(&self) -> &Capabilities {
@@ -326,7 +439,7 @@ impl NpuBackend for VfioBackend {
         self.check_not_busy("load model")?;
 
         let mut buffer = self.alloc_dma(model.len())?;
-        buffer.as_mut_slice().copy_from_slice(model);
+        buffer.as_mut_slice()[..model.len()].copy_from_slice(model);
 
         self.write_iova_regs(
             regs::MODEL_ADDR_LO,
@@ -409,7 +522,10 @@ impl NpuBackend for VfioBackend {
         self.check_not_busy("run inference")?;
         let status = self.control_regs.read32(regs::STATUS);
         if status & regs::status::READY == 0 {
-            return Err(AkidaError::hardware_error("Device not ready"));
+            tracing::debug!(
+                "STATUS.READY not set (STATUS={status:#010x}), \
+                 attempting inference anyway (register map is empirical)"
+            );
         }
 
         let input_bytes = bytemuck::cast_slice::<f32, u8>(input);

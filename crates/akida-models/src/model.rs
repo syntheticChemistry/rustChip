@@ -22,6 +22,12 @@ pub struct Model {
 
     /// Raw model data
     data: Vec<u8>,
+
+    /// Input tensor shape (from manifest or heuristic). Empty if unknown.
+    input_shape: Vec<usize>,
+
+    /// Output tensor shape (from manifest or heuristic). Empty if unknown.
+    output_shape: Vec<usize>,
 }
 
 /// Neural network layer
@@ -150,7 +156,27 @@ impl Model {
             layers,
             weights,
             data: payload,
+            input_shape: Vec::new(),
+            output_shape: Vec::new(),
         })
+    }
+
+    /// Set input/output shapes from external metadata (e.g. zoo manifest).
+    pub fn set_shapes(&mut self, input: Vec<usize>, output: Vec<usize>) {
+        self.input_shape = input;
+        self.output_shape = output;
+    }
+
+    /// Input tensor shape. Empty if not yet populated from manifest.
+    #[must_use]
+    pub fn input_shape(&self) -> &[usize] {
+        &self.input_shape
+    }
+
+    /// Output tensor shape. Empty if not yet populated from manifest.
+    #[must_use]
+    pub fn output_shape(&self) -> &[usize] {
+        &self.output_shape
     }
 
     /// Get model SDK version

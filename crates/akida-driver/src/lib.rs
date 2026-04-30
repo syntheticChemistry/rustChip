@@ -62,6 +62,7 @@ mod device;
 mod discovery;
 mod error;
 pub mod evolution;
+pub mod glowplug;
 pub mod hybrid;
 mod inference;
 mod io;

@@ -1,0 +1,4 @@
+# Binary model artifacts — regenerate via: scripts/export_zoo.py
+*.fbz
+# Keep the manifest (ground-truth metadata for Rust regression tests)
+!zoo_manifest.json

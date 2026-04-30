@@ -185,55 +185,105 @@ impl LoadVerification {
     }
 }
 
-/// Backend type identifier
+/// Backend type identifier.
+///
+/// Hardware and software backends are **parallel and complementary** — never
+/// conflated. A hardware backend talks to real silicon over PCIe; a software
+/// backend simulates the same NP dynamics on CPU. Both implement [`NpuBackend`]
+/// and produce comparable results, but they are architecturally distinct:
+///
+/// - Hardware backends are **measurement sources** (latency, power, throughput)
+/// - Software backends are **reference implementations** (deterministic, portable)
+///
+/// Use [`BackendType::is_hardware`] and [`BackendType::is_software`] to branch
+/// on the domain without matching individual variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendType {
-    /// Kernel driver (/dev/akida*)
+    /// Kernel driver (/dev/akida*) — hardware, requires C module
     Kernel,
 
-    /// Userspace driver (mmap `PCIe` BARs)
+    /// Userspace driver (mmap `PCIe` BARs) — hardware, no DMA
     Userspace,
 
-    /// VFIO driver (pure Rust with DMA)
+    /// VFIO driver (pure Rust with DMA) — hardware, preferred production path
     Vfio,
 
-    /// Software (virtual NPU) — f32 CPU simulation, no hardware required
+    /// Software (virtual NPU) — f32 CPU simulation, no hardware required.
+    /// Produces numerically comparable results to hardware (minus int4
+    /// quantization gap of ~1-3%). Never a silent fallback for hardware.
     Software,
+}
+
+impl BackendType {
+    /// Whether this backend runs on real silicon.
+    #[must_use]
+    pub const fn is_hardware(self) -> bool {
+        matches!(self, Self::Kernel | Self::Userspace | Self::Vfio)
+    }
+
+    /// Whether this backend runs in software simulation.
+    #[must_use]
+    pub const fn is_software(self) -> bool {
+        matches!(self, Self::Software)
+    }
+
+    /// Short label for the compute domain (HW or SW).
+    #[must_use]
+    pub const fn domain(self) -> &'static str {
+        if self.is_hardware() { "HW" } else { "SW" }
+    }
 }
 
 impl std::fmt::Display for BackendType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Kernel => write!(f, "Kernel"),
-            Self::Userspace => write!(f, "Userspace"),
-            Self::Vfio => write!(f, "VFIO"),
-            Self::Software => write!(f, "Software (VirtualNPU)"),
+            Self::Kernel => write!(f, "Kernel [HW]"),
+            Self::Userspace => write!(f, "Userspace [HW]"),
+            Self::Vfio => write!(f, "VFIO [HW]"),
+            Self::Software => write!(f, "Software [SW]"),
         }
     }
 }
 
-/// Backend selection strategy
+/// Backend selection strategy.
+///
+/// Hardware and software are **parallel domains** — `Auto` only searches
+/// within hardware backends. Request `Software` explicitly when you want
+/// the CPU simulation path. This prevents silent conflation of hardware
+/// measurements with software approximations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendSelection {
-    /// Automatically select best available
+    /// Best available **hardware** backend (Kernel → VFIO → Userspace).
+    /// Never silently falls back to software.
     Auto,
 
-    /// Force kernel driver
+    /// Force kernel driver (`/dev/akida*`) — hardware.
     Kernel,
 
-    /// Force userspace driver
+    /// Force userspace driver (BAR mmap) — hardware.
     Userspace,
 
-    /// Force VFIO driver (pure Rust with DMA)
+    /// Force VFIO driver (pure Rust with DMA) — hardware.
     Vfio,
 
-    /// Force software (virtual NPU) backend — for CI and cross-substrate comparison
+    /// Force software (virtual NPU) backend — explicitly software.
+    /// Use for CI, cross-substrate comparison, and reference validation.
     Software,
 }
 
-/// Select appropriate backend based on availability and requirements
+impl BackendSelection {
+    /// Whether this selection targets hardware backends.
+    #[must_use]
+    pub const fn is_hardware(self) -> bool {
+        matches!(self, Self::Auto | Self::Kernel | Self::Userspace | Self::Vfio)
+    }
+}
+
+/// Select appropriate backend based on availability and requirements.
 ///
-/// Deep Debt: Runtime discovery, no assumptions about environment
+/// `Auto` tries hardware backends in priority order and **never** falls
+/// back to software. Request `BackendSelection::Software` explicitly
+/// when you want the CPU simulation path.
 ///
 /// # Errors
 ///
@@ -246,20 +296,17 @@ pub fn select_backend(selection: BackendSelection, device_id: &str) -> Result<Bo
 
     match selection {
         BackendSelection::Auto => {
-            // Try kernel first (best performance with C module)
             if let Ok(backend) = KernelBackend::init(device_id) {
-                tracing::info!("Using kernel backend for {device_id}");
+                tracing::info!("Using kernel backend [HW] for {device_id}");
                 return Ok(Box::new(backend));
             }
 
-            // Try VFIO second (pure Rust with DMA)
             if let Ok(backend) = VfioBackend::init(device_id) {
-                tracing::info!("Using VFIO backend for {device_id}");
+                tracing::info!("Using VFIO backend [HW] for {device_id}");
                 return Ok(Box::new(backend));
             }
 
-            // Fall back to userspace (pure Rust, no DMA)
-            tracing::info!("Kernel/VFIO unavailable, using userspace for {device_id}");
+            tracing::info!("Kernel/VFIO unavailable, using userspace [HW] for {device_id}");
             UserspaceBackend::init(device_id).map(|b| Box::new(b) as Box<dyn NpuBackend>)
         }
 
@@ -310,9 +357,27 @@ mod tests {
 
     #[test]
     fn backend_type_display_covers_all_variants() {
-        assert_eq!(BackendType::Kernel.to_string(), "Kernel");
-        assert_eq!(BackendType::Userspace.to_string(), "Userspace");
-        assert_eq!(BackendType::Vfio.to_string(), "VFIO");
+        assert_eq!(BackendType::Kernel.to_string(), "Kernel [HW]");
+        assert_eq!(BackendType::Userspace.to_string(), "Userspace [HW]");
+        assert_eq!(BackendType::Vfio.to_string(), "VFIO [HW]");
+        assert_eq!(BackendType::Software.to_string(), "Software [SW]");
+    }
+
+    #[test]
+    fn hardware_software_domain_never_conflated() {
+        assert!(BackendType::Kernel.is_hardware());
+        assert!(BackendType::Userspace.is_hardware());
+        assert!(BackendType::Vfio.is_hardware());
+        assert!(!BackendType::Software.is_hardware());
+
+        assert!(!BackendType::Kernel.is_software());
+        assert!(BackendType::Software.is_software());
+
+        assert_eq!(BackendType::Vfio.domain(), "HW");
+        assert_eq!(BackendType::Software.domain(), "SW");
+
+        assert!(BackendSelection::Auto.is_hardware());
+        assert!(!BackendSelection::Software.is_hardware());
     }
 
     #[test]

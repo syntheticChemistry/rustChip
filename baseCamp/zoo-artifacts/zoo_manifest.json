@@ -1,0 +1,390 @@
+{
+  "generator": "scripts/export_zoo.py",
+  "akida_version": "2.19.1",
+  "timestamp": "2026-04-29T21:35:16Z",
+  "models": [
+    {
+      "name": "akida_unet_portrait128",
+      "filename": "akida_unet_portrait128.fbz",
+      "file_size": 1302167,
+      "input_shape": [
+        128,
+        128,
+        3
+      ],
+      "output_shape": [
+        128,
+        128,
+        1
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "akidanet18_imagenet",
+      "filename": "akidanet18_imagenet.fbz",
+      "file_size": 2826776,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        1000
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "akidanet_faceidentification",
+      "filename": "akidanet_faceidentification.fbz",
+      "file_size": 2834192,
+      "input_shape": [
+        112,
+        96,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        10575
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "akidanet_imagenet",
+      "filename": "akidanet_imagenet.fbz",
+      "file_size": 5269426,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        1000
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "akidanet_plantvillage",
+      "filename": "akidanet_plantvillage.fbz",
+      "file_size": 1402295,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        38
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "akidanet_vww",
+      "filename": "akidanet_vww.fbz",
+      "file_size": 303748,
+      "input_shape": [
+        96,
+        96,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        2
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "centernet_voc",
+      "filename": "centernet_voc.fbz",
+      "file_size": 2863839,
+      "input_shape": [
+        384,
+        384,
+        3
+      ],
+      "output_shape": [
+        96,
+        96,
+        24
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "convtiny_gesture",
+      "filename": "convtiny_gesture.fbz",
+      "file_size": 174089,
+      "input_shape": [
+        64,
+        64,
+        10
+      ],
+      "output_shape": [
+        1,
+        1,
+        10
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "convtiny_handy_samsung",
+      "filename": "convtiny_handy_samsung.fbz",
+      "file_size": 172432,
+      "input_shape": [
+        120,
+        160,
+        2
+      ],
+      "output_shape": [
+        1,
+        1,
+        9
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "ds_cnn_kws",
+      "filename": "ds_cnn_kws.fbz",
+      "file_size": 41360,
+      "input_shape": [
+        49,
+        10,
+        1
+      ],
+      "output_shape": [
+        1,
+        1,
+        33
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "gxnor_mnist",
+      "filename": "gxnor_mnist.fbz",
+      "file_size": 202560,
+      "input_shape": [
+        28,
+        28,
+        1
+      ],
+      "output_shape": [
+        1,
+        1,
+        10
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "mobilenet_imagenet",
+      "filename": "mobilenet_imagenet.fbz",
+      "file_size": 5027562,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        1000
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "pointnet_plus_modelnet40",
+      "filename": "pointnet_plus_modelnet40.fbz",
+      "file_size": 342728,
+      "input_shape": [
+        8,
+        256,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        40
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "tenn_recurrent_sc12",
+      "filename": "tenn_recurrent_sc12.fbz",
+      "file_size": 69630,
+      "input_shape": [
+        1,
+        256,
+        1
+      ],
+      "output_shape": [
+        1,
+        1,
+        12
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "tenn_recurrent_uored",
+      "filename": "tenn_recurrent_uored.fbz",
+      "file_size": 36744,
+      "input_shape": [
+        1,
+        256,
+        1
+      ],
+      "output_shape": [
+        1,
+        1,
+        4
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "tenn_spatiotemporal_dvs128",
+      "filename": "tenn_spatiotemporal_dvs128.fbz",
+      "file_size": 224862,
+      "input_shape": [
+        128,
+        128,
+        2
+      ],
+      "output_shape": [
+        1,
+        1,
+        10
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "tenn_spatiotemporal_eye",
+      "filename": "tenn_spatiotemporal_eye.fbz",
+      "file_size": 275006,
+      "input_shape": [
+        80,
+        106,
+        2
+      ],
+      "output_shape": [
+        3,
+        4,
+        3
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "tenn_spatiotemporal_jester",
+      "filename": "tenn_spatiotemporal_jester.fbz",
+      "file_size": 1611021,
+      "input_shape": [
+        100,
+        100,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        27
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "vgg_utk_face",
+      "filename": "vgg_utk_face.fbz",
+      "file_size": 149594,
+      "input_shape": [
+        32,
+        32,
+        3
+      ],
+      "output_shape": [
+        1,
+        1,
+        1
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "yolo_voc",
+      "filename": "yolo_voc.fbz",
+      "file_size": 4368293,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        7,
+        7,
+        125
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    },
+    {
+      "name": "yolo_widerface",
+      "filename": "yolo_widerface.fbz",
+      "file_size": 4239470,
+      "input_shape": [
+        224,
+        224,
+        3
+      ],
+      "output_shape": [
+        7,
+        7,
+        18
+      ],
+      "layer_count": null,
+      "layers": [],
+      "status": "ok"
+    }
+  ],
+  "summary": {
+    "total": 21,
+    "ok": 21,
+    "failed": 0
+  }
+}

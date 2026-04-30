@@ -130,7 +130,9 @@ impl SramAccessor {
     fn ensure_bar1(&mut self) -> Result<&mut MmapRegion> {
         if self.bar1.is_none() {
             tracing::info!("Mapping BAR1 for {}", self.pcie_address);
-            let bar1 = MmapRegion::new(&self.pcie_address, 1)?;
+            // AKD1000 BARs are 64-bit; the NP mesh/SRAM window is at sysfs
+            // resource2 (BAR2 in PCI config = register pair 2+3).
+            let bar1 = MmapRegion::new(&self.pcie_address, 2)?;
             tracing::info!(
                 "BAR1 mapped: {} bytes ({} MB)",
                 bar1.size(),

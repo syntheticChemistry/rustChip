@@ -42,7 +42,6 @@ pub const VFIO_DEVICE_GET_REGION_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 8);
 pub const VFIO_DEVICE_GET_IRQ_INFO: c_ulong = io(VFIO_TYPE, VFIO_BASE + 9);
 #[expect(dead_code, reason = "Reserved for future IRQ support")]
 pub const VFIO_DEVICE_SET_IRQS: c_ulong = io(VFIO_TYPE, VFIO_BASE + 10);
-#[expect(dead_code, reason = "Reserved for future device reset")]
 pub const VFIO_DEVICE_RESET: c_ulong = io(VFIO_TYPE, VFIO_BASE + 11);
 
 // IOMMU DMA mapping
@@ -277,4 +276,19 @@ pub(crate) fn ioctl_vfio_iommu_unmap_dma(container_fd: RawFd, unmap: &VfioDmaUnm
     unsafe {
         let _ = vfio_iommu_unmap_dma(container_fd, std::ptr::from_ref(unmap));
     }
+}
+
+/// Issue `VFIO_DEVICE_RESET` to reset the device through the VFIO subsystem.
+///
+/// Not all devices support this — returns `Ok(())` on success, error on failure.
+pub(crate) fn ioctl_vfio_device_reset(device_fd: RawFd) -> Result<()> {
+    // SAFETY: VFIO_DEVICE_RESET — device fd from VFIO_GROUP_GET_DEVICE_FD, no args.
+    let ret = unsafe { libc::ioctl(device_fd, VFIO_DEVICE_RESET as _) };
+    if ret < 0 {
+        return Err(AkidaError::hardware_error(format!(
+            "VFIO device reset failed: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(())
 }

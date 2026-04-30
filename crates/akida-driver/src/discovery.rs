@@ -33,20 +33,23 @@ pub struct DeviceInfo {
 }
 
 impl DeviceManager {
-    /// Discover all Akida devices on the system
+    /// Discover all Akida devices on the system.
     ///
-    /// This scans for `/dev/akida*` devices and queries their capabilities
-    /// via sysfs. Pure runtime discovery—no assumptions.
+    /// Two discovery paths, tried in order:
+    /// 1. **Kernel driver** — `/dev/akida*` device nodes (classic path)
+    /// 2. **VFIO / sysfs** — scan PCIe bus for BrainChip vendor ID, works when
+    ///    the device is bound to `vfio-pci` or has no driver at all.
     ///
     /// # Errors
     ///
-    /// Returns `AkidaError::NoDevicesFound` if no devices are detected.
+    /// Returns `AkidaError::NoDevicesFound` if no devices are detected via
+    /// either path.
     pub fn discover() -> Result<Self> {
         tracing::info!("Discovering Akida devices...");
 
         let mut devices = Vec::new();
 
-        // Scan for /dev/akida* devices (up to 16)
+        // Path 1: kernel driver (/dev/akida*)
         for index in 0..16 {
             let path = PathBuf::from(format!("/dev/akida{index}"));
 
@@ -56,10 +59,8 @@ impl DeviceManager {
 
             tracing::debug!("Found device file: {}", path.display());
 
-            // Find corresponding PCIe address
             let pcie_address = Self::find_pcie_address(index)?;
 
-            // Query capabilities
             match Capabilities::query(index, &pcie_address) {
                 Ok(capabilities) => {
                     tracing::info!(
@@ -86,6 +87,12 @@ impl DeviceManager {
             }
         }
 
+        // Path 2: VFIO / sysfs fallback — scan PCIe bus for BrainChip devices
+        if devices.is_empty() {
+            tracing::debug!("No /dev/akida* found, scanning PCIe sysfs for VFIO-bound devices");
+            devices = Self::discover_via_sysfs()?;
+        }
+
         if devices.is_empty() {
             tracing::error!("No Akida devices found");
             return Err(AkidaError::NoDevicesFound);
@@ -94,6 +101,81 @@ impl DeviceManager {
         tracing::info!("Discovered {} Akida device(s)", devices.len());
 
         Ok(Self { devices })
+    }
+
+    /// Scan `/sys/bus/pci/devices/` for BrainChip vendor IDs.
+    ///
+    /// Works regardless of which driver is bound (vfio-pci, akida_pcie, or
+    /// none). This is the pure-VFIO discovery path.
+    fn discover_via_sysfs() -> Result<Vec<DeviceInfo>> {
+        use crate::pcie_ids::{ALL_DEVICE_IDS, BRAINCHIP_VENDOR_ID};
+
+        let pci_devices_path = Path::new("/sys/bus/pci/devices");
+        let entries = std::fs::read_dir(pci_devices_path).map_err(|e| {
+            AkidaError::capability_query_failed(format!("Cannot read PCIe devices: {e}"))
+        })?;
+
+        let mut pcie_addrs: Vec<String> = Vec::new();
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let vendor_id = Self::read_hex_sysfs(&path.join("vendor")).ok();
+            let device_id = Self::read_hex_sysfs(&path.join("device")).ok();
+
+            if let (Some(vendor), Some(device)) = (vendor_id, device_id)
+                && vendor == BRAINCHIP_VENDOR_ID
+                && ALL_DEVICE_IDS.contains(&device)
+            {
+                pcie_addrs.push(entry.file_name().to_string_lossy().to_string());
+            }
+        }
+
+        pcie_addrs.sort();
+
+        let mut devices = Vec::new();
+        for (index, pcie_address) in pcie_addrs.into_iter().enumerate() {
+            let driver_link = format!("/sys/bus/pci/devices/{pcie_address}/driver");
+            let driver_name = std::fs::read_link(&driver_link)
+                .ok()
+                .and_then(|t| t.file_name().map(|n| n.to_string_lossy().to_string()));
+
+            let device_path = match driver_name.as_deref() {
+                Some("vfio-pci") => {
+                    let group = crate::vfio::iommu_group(&pcie_address)
+                        .unwrap_or(0);
+                    PathBuf::from(format!("/dev/vfio/{group}"))
+                }
+                _ => PathBuf::from(format!("/sys/bus/pci/devices/{pcie_address}")),
+            };
+
+            match Capabilities::from_sysfs(&pcie_address) {
+                Ok(capabilities) => {
+                    tracing::info!(
+                        "VFIO/sysfs device {}: {:?} @ {} ({} NPUs, {} MB, driver={:?})",
+                        index,
+                        capabilities.chip_version,
+                        pcie_address,
+                        capabilities.npu_count,
+                        capabilities.memory_mb,
+                        driver_name.as_deref().unwrap_or("none"),
+                    );
+
+                    devices.push(DeviceInfo {
+                        index,
+                        path: device_path,
+                        pcie_address,
+                        capabilities,
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "VFIO/sysfs: cannot query capabilities for {pcie_address}: {e}"
+                    );
+                }
+            }
+        }
+
+        Ok(devices)
     }
 
     /// Get number of discovered devices

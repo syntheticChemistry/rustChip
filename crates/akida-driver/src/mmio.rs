@@ -25,15 +25,22 @@ use rustix::mm::{MapFlags, ProtFlags, mmap, munmap};
 use std::fs::File;
 use std::os::unix::io::{AsFd, AsRawFd};
 
-/// AKD1000 BAR regions
+/// AKD1000 BAR regions (VFIO region indices).
+///
+/// All three BARs on AKD1000 are 64-bit prefetchable. In PCI config space,
+/// each 64-bit BAR occupies two 32-bit register slots. VFIO maps the full
+/// 64-bit region at the base register index:
+///   - BAR0 (registers 0+1) → VFIO region 0
+///   - BAR2 (registers 2+3) → VFIO region 2
+///   - BAR4 (registers 4+5) → VFIO region 4
 #[derive(Debug, Clone, Copy)]
 pub enum Bar {
-    /// Control/status registers (BAR0)
+    /// Control/status registers (BAR0 — VFIO region 0, 4 MB)
     Control = 0,
-    /// Model memory (BAR1)
-    Model = 1,
-    /// Data buffers (BAR2)
-    Data = 2,
+    /// NP mesh / SRAM window (BAR2 — VFIO region 2, 4 MB)
+    Model = 2,
+    /// Secondary memory (BAR4 — VFIO region 4, 4 MB)
+    Data = 4,
 }
 
 /// AKD1000 register offsets (inferred from behavior)
@@ -168,8 +175,9 @@ impl MappedRegion {
             ..Default::default()
         };
 
-        // VFIO_DEVICE_GET_REGION_INFO = _IOWR(';', 100 + 8, ...)
-        const VFIO_DEVICE_GET_REGION_INFO: libc::c_ulong = 0xc018_3b68;
+        // VFIO_DEVICE_GET_REGION_INFO = _IO(';', 100 + 8) — VFIO uses _IO, not _IOWR
+        const VFIO_DEVICE_GET_REGION_INFO: libc::c_ulong =
+            ((b';' as libc::c_ulong) << 8) | 108;
 
         // SAFETY: VFIO_DEVICE_GET_REGION_INFO ioctl necessary for MMIO - kernel returns BAR size/offset.
         // Invariants: (1) device_fd valid from VFIO device open; (2) VfioRegionInfo initialized
@@ -331,10 +339,10 @@ mod tests {
     }
 
     #[test]
-    fn bar_indices_match_pci_resource_convention() {
+    fn bar_indices_match_vfio_region_convention() {
         assert_eq!(Bar::Control as u8, 0);
-        assert_eq!(Bar::Model as u8, 1);
-        assert_eq!(Bar::Data as u8, 2);
+        assert_eq!(Bar::Model as u8, 2);
+        assert_eq!(Bar::Data as u8, 4);
     }
 
     #[test]

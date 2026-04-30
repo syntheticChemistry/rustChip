@@ -176,23 +176,89 @@ impl ProgramBuilder {
         allocations
     }
 
-    #[expect(
-        clippy::unused_self,
-        reason = "Placeholder serializer; self reserved for future format work"
-    )]
-    const fn serialize(&self, _allocation: &[NpAllocation]) -> (Vec<u8>, Vec<u8>) {
-        // Placeholder: actual FlatBuffer serialization will be implemented
-        // once the full program_info/program_data binary format is confirmed.
-        //
-        // Current understanding (from akida_chip::program):
-        //   program_info: NP routing table + register write sequence (~332 bytes)
-        //   program_data: layer metadata + activation params (~396 bytes)
-        //
-        // The format is reverse-engineered from .fbz files and C++ engine
-        // symbol analysis. See SILICON_SPEC.md §6 for details.
+    fn serialize(&self, allocation: &[NpAllocation]) -> (Vec<u8>, Vec<u8>) {
+        use crate::schema::{LayerDescriptor, ModelDescriptor, PropertyValue};
 
-        let info = Vec::new();
-        let data = Vec::new();
+        let mut desc = ModelDescriptor::new(akida_chip::program::SDK_VERSION_STR);
+
+        for (i, (layer_spec, alloc)) in
+            self.layers.iter().zip(allocation.iter()).enumerate()
+        {
+            let (name, layer_type, props) = match layer_spec {
+                LayerSpec::InputConv {
+                    channels,
+                    kernel_size,
+                    stride,
+                    activation,
+                } => (
+                    format!("conv_{i}"),
+                    "InputConv",
+                    vec![
+                        ("channels", PropertyValue::Int(i64::from(*channels))),
+                        ("kernel_size", PropertyValue::Int(i64::from(*kernel_size))),
+                        ("stride", PropertyValue::Int(i64::from(*stride))),
+                        ("activation", PropertyValue::Str(format!("{activation:?}"))),
+                    ],
+                ),
+                LayerSpec::FullyConnected {
+                    neurons,
+                    activation,
+                    is_input,
+                    is_output,
+                } => (
+                    format!("dense_{i}"),
+                    "FullyConnected",
+                    vec![
+                        ("units", PropertyValue::Int(i64::from(*neurons))),
+                        ("activation", PropertyValue::Str(format!("{activation:?}"))),
+                        ("is_input", PropertyValue::Int(i64::from(*is_input))),
+                        ("is_output", PropertyValue::Int(i64::from(*is_output))),
+                    ],
+                ),
+                LayerSpec::SeparableConv {
+                    filters,
+                    kernel_size,
+                    stride,
+                    activation,
+                } => (
+                    format!("pw_separable_{i}"),
+                    "SeparableConv",
+                    vec![
+                        ("filters", PropertyValue::Int(i64::from(*filters))),
+                        ("kernel_size", PropertyValue::Int(i64::from(*kernel_size))),
+                        ("stride", PropertyValue::Int(i64::from(*stride))),
+                        ("activation", PropertyValue::Str(format!("{activation:?}"))),
+                    ],
+                ),
+            };
+
+            let quant_bits = self
+                .quant_config
+                .as_ref()
+                .map_or(4, |q| q.weight_bits);
+
+            let mut ld = LayerDescriptor::new(&name)
+                .with_str("layer_type", layer_type)
+                .with_int("weights_bits", i64::from(quant_bits))
+                .with_int("np_start", i64::from(alloc.start_np))
+                .with_int("np_count", i64::from(alloc.np_count));
+
+            for (k, v) in props {
+                ld.properties.push((k.to_string(), v));
+            }
+
+            desc.add_layer(ld);
+        }
+
+        let fbz = crate::schema::build_fbz(&desc);
+
+        // For program_external() the split is at the boundary between
+        // routing info and layer data. For .fbz models serialized this
+        // way, the entire payload is one contiguous blob (the hardware
+        // split is only relevant for DMA injection).
+        let split = fbz.len() / 2;
+        let info = fbz[..split].to_vec();
+        let data = fbz[split..].to_vec();
 
         (info, data)
     }
@@ -497,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn program_builder_with_input_produces_empty_split_program_binary() {
+    fn program_builder_with_input_produces_nonempty_program_binary() {
         let mut builder = ProgramBuilder::new()
             .with_np_offset(10)
             .with_quantization(QuantConfig {
@@ -512,10 +578,10 @@ mod tests {
             is_output: false,
         });
         let bin = builder.build().expect("valid minimal program");
-        assert_eq!(bin.info_end, 0);
-        assert!(bin.program_info().is_empty());
-        assert!(bin.program_data().is_empty());
-        assert!(bin.is_empty());
+        assert!(!bin.is_empty(), "serializer should produce bytes");
+        assert!(bin.info_end > 0);
+        assert!(!bin.program_info().is_empty());
+        assert!(!bin.program_data().is_empty());
     }
 
     #[test]

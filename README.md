@@ -1,12 +1,15 @@
-# rustChip
+# rustChip — Pure Rust Neuromorphic Inference
 
-Pure Rust software stack for BrainChip Akida neuromorphic processors (AKD1000, AKD1500).
+**Date:** April 30, 2026
+**License:** AGPL-3.0-or-later (scyBorg triple)
+**MSRV:** Rust 2024 edition
+**Status:** 367 tests passing | 28-model zoo | 5 crates | pure Rust conversion pipeline | guideStone validated | Phase D sovereign driver | glowplug VFIO lifecycle | HW/SW backends | 5 science demos | CI enabled
+
+No Python. No C++ SDK. No MetaTF. No kernel module required.
 
 Forked from [Brainchip-Inc/akida_dw_edma](https://github.com/Brainchip-Inc/akida_dw_edma).
 C kernel module → deprecated (see [docs/DEPRECATED.md](docs/DEPRECATED.md)).
 All active development is in the crates and directories below.
-
-No Python. No C++ SDK. No MetaTF. No kernel module required.
 
 ---
 
@@ -36,6 +39,20 @@ ecology, atmospheric physics, neural architectures, uncertainty quantification).
 The AKD1000 was used in production physics simulation — 5,978 live hardware calls,
 24 hours, lattice SU(3). This is the distillation of what we learned.
 
+**Sovereign compute trio** — three primals form the core compute pipeline:
+
+| Primal | Role | What it does | Repo |
+|--------|------|--------------|------|
+| [toadStool](https://github.com/ecoPrimals/toadStool) | **WHERE** — dispatch | GPU/NPU/CPU discovery, tolerance-based routing, 21K+ tests | [ecoPrimals/toadStool](https://github.com/ecoPrimals/toadStool) |
+| [coralReef](https://github.com/ecoPrimals/coralReef) | **HOW** — compile | Sovereign GPU compiler: WGSL/SPIR-V/GLSL to native NVIDIA (SM35–SM120) and AMD (GCN5/RDNA2). No LLVM, no Mesa, no vendor SDK. 3K+ tests | [ecoPrimals/coralReef](https://github.com/ecoPrimals/coralReef) |
+| [barraCuda](https://github.com/ecoPrimals/barraCuda) | **WHAT** — compute | 900+ WGSL shaders, DF64 double-precision emulation, lattice QCD, molecular dynamics, FHE, spectral analysis. 3.3K+ tests | [ecoPrimals/barraCuda](https://github.com/ecoPrimals/barraCuda) |
+
+rustChip is the **standalone NPU extraction** from this pipeline. It does not depend
+on any of the trio at compile time — but it is designed to hand off results naturally.
+NPU inference output (`&[f32]`) feeds directly into barraCuda shaders or toadStool's
+dispatch queue. The VFIO patterns in rustChip's driver mirror coralReef's
+`ember`/`glowplug` architecture for sovereign GPU access.
+
 ---
 
 ## Repository structure
@@ -48,6 +65,7 @@ rustChip/
 │   │   └── src/sram.rs         BAR1 address layout, per-NP SRAM offsets, probe points
 │   ├── akida-driver/           full driver: VFIO, kernel, userspace, software, SRAM access
 │   │   ├── src/hybrid.rs       HybridEsn: substrate-agnostic ESN executor (tanh + hardware)
+│   │   ├── src/glowplug.rs     Sovereign VFIO lifecycle (absorbed from coralReef ember/glowplug)
 │   │   ├── src/sram.rs         SramAccessor: BAR0 register dump + BAR1 read/write/probe
 │   │   ├── src/tenancy.rs      MultiTenantDevice: NP slot management + isolation verification
 │   │   ├── src/evolution.rs    NpuEvolver: online weight evolution via direct SRAM mutation
@@ -55,7 +73,7 @@ rustChip/
 │   │   └── src/sentinel.rs     DriftMonitor: domain-shift detection + adaptive recovery
 │   ├── akida-models/           FlatBuffer parser, ProgramBuilder, model zoo
 │   │   └── src/builder.rs      ProgramBuilder: layer-by-layer FlatBuffer construction
-│   ├── akida-bench/            benchmark suite: 10 discoveries + experiments + SRAM probe
+│   ├── akida-bench/            benchmark suite: 10 discoveries + experiments + SRAM probe + 5 science demos
 │   └── akida-cli/              `akida` command-line tool
 │
 ├── specs/                      Technical specification — read before coding
@@ -90,16 +108,22 @@ rustChip/
 │   │   ├── 001_BASELINE_CHARACTERIZATION.md  ✅ 10 BEYOND_SDK discoveries
 │   │   ├── 002_MULTI_TENANCY.md              Phase 1 ✅ | Phase 2 (hw co-loading)
 │   │   ├── 003_BEYOND_CLAIMED.md             extended SDK capability validation
-│   │   └── 004_HYBRID_TANH.md               Phase 1 ✅ | Phase 2 (FlatBuffer path)
+│   │   ├── 004_HYBRID_TANH.md               Phase 1 ✅ | Phase 2 (FlatBuffer path)
+│   │   ├── 005_WILDLIFE_BASELINE.md          ✅ VFIO userspace discovery + BAR + SRAM
+│   │   └── 006_REGISTER_PROBE.md             ✅ BAR0 true layout discovery
 │   └── npu/akida/              measurement logs, register probes, hardware profiles
 │
 ├── whitePaper/                 Analysis and outreach
 │   ├── README.md               index
-│   ├── explorations/           deep-dive technical writeups
+│   ├── explorations/           deep-dive technical writeups (8 documents)
 │   │   ├── TANH_CONSTRAINT.md  the bounded ReLU finding — impact on hotSpring
 │   │   ├── VFIO_VS_KMOD.md     why VFIO beats the C kernel module
 │   │   ├── GPU_NPU_PCIE.md     P2P DMA: GPU → NPU without CPU copy
-│   │   └── RUST_AT_SILICON.md  long-term pure-Rust substrate vision
+│   │   ├── RUST_AT_SILICON.md  long-term pure-Rust substrate vision
+│   │   ├── WHY_NPU.md          the neuromorphic argument grounded in hardware evidence
+│   │   ├── SPRINGS_ON_SILICON.md  5 NPU patterns × 3 science domains
+│   │   ├── NPU_FRONTIERS.md    10 creative frontiers for neuromorphic hardware
+│   │   └── NPU_ON_GPU_DIE.md   NPU as a GPU functional unit — area/power analysis
 │   └── outreach/akida/         material for BrainChip engineering team
 │       ├── TECHNICAL_BRIEF.md  10 discoveries + production use + novel systems
 │       ├── BENCHMARK_DATASHEET.md  full measurement dataset
@@ -110,17 +134,25 @@ rustChip/
 │   ├── DEPRECATED.md           migration guide from C kernel module
 │   └── PR_DESCRIPTION.md       historical PR description (archived)
 ├── CHANGELOG.md                change history
-├── install.sh                  legacy: build/install akida-pcie.ko (see Development)
-├── build_kernel_w_cma.sh       legacy: custom kernel with CMA for AKD1500 (see Development)
-└── Makefile                    legacy kernel-module build (see Development)
+├── akida-pcie-core.c           historical: C kernel module (deprecated — see docs/DEPRECATED.md)
+├── install.sh                  historical: build/install akida-pcie.ko
+├── build_kernel_w_cma.sh       historical: custom kernel with CMA for AKD1500
+└── Makefile                    historical: kernel-module build
 ```
 
 ---
 
 ## Quick start
 
+**New here?** See [QUICKSTART.md](QUICKSTART.md) — clone to first model parse in 5 commands.
+
 ```bash
 cd rustChip/
+
+# First: verify everything works (337 tests, ~2 seconds)
+cargo test --workspace
+
+# Build release
 cargo build --release
 
 # List devices
@@ -169,7 +201,7 @@ For the primary VFIO-based stack, none of these are required.
 
 ```text
 Primary — VFIO (no kernel module):
-  cargo run --bin akida -- bind-vfio 0000:a1:00.0   # once, requires root
+  pkexec ./scripts/bind-akida-vfio.sh               # once per boot (or install udev rule)
   cargo run --bin akida -- enumerate                 # no root needed after
 
 Fallback — C kernel module (if installed):
@@ -178,6 +210,21 @@ Fallback — C kernel module (if installed):
 ```
 
 VFIO provides full DMA, IOMMU isolation, works on any kernel version.
+
+**User-level access**: Install the udev rule at `/etc/udev/rules.d/99-akida-vfio.rules`
+(provided in `scripts/`) to auto-bind the Akida device to `vfio-pci` and set
+`MODE="0666"` on the VFIO group device. After install, no `pkexec`/`sudo` is needed
+at runtime — the device is user-accessible on every boot.
+
+**Live VFIO validation** (AKD1000, vendor `1e7c`, device `bca1`, Apr 2026):
+
+| Result | Value |
+|--------|-------|
+| NPUs discovered via VFIO BAR | 80 |
+| SRAM reported | 10 MB |
+| IOMMU group | 92 |
+| BAR mapping | Successful (ioctl fix: corrected `VFIO_DEVICE_GET_REGION_INFO` encoding from `_IOWR` to `_IO`) |
+| User-level operation | Confirmed via udev — no root at runtime |
 
 ---
 
@@ -344,12 +391,60 @@ Want to read/write all on-chip memory? Start here:
 
 ---
 
-## License
+## License — scyBorg triple
 
-AGPL-3.0-or-later.
+rustChip is licensed under the **scyBorg Provenance Trio**, the same triple-copyleft
+framework that covers the entire ecoPrimals ecosystem. Three independent nonprofits
+govern the three layers — no single entity can revoke any of them.
+
+| Layer | License | Governed by | Scope |
+|-------|---------|-------------|-------|
+| Code | **AGPL-3.0-or-later** | Free Software Foundation | All Rust crates, scripts, build files |
+| Documentation | **CC-BY-SA 4.0** | Creative Commons | specs/, baseCamp/, whitePaper/, this README |
+| Game mechanics | **ORC** | Open RPG Creative Foundation | See LICENSE-ORC |
+
+See [LICENSE](LICENSE) and [LICENSE-ORC](LICENSE-ORC) for the authoritative terms.
+
 The original C kernel module files at the repository root are GPL-2.0 (BrainChip Inc.).
+
+**Lineage principle**: rustChip absorbs functionality from the wider ecoPrimals
+ecosystem (coralReef, toadStool, etc.) to operate standalone. Code with ecoPrimals
+lineage carries the full scyBorg triple by inheritance — relocation does not strip
+provenance. Currently this includes `glowplug/` (absorbed from coralReef's
+`coral-ember`/`coral-glowplug`).
+
+**Symbiotic exception (BrainChip)**: rustChip-original code (Akida driver core,
+chip definitions, model parsers, benchmarks) is offered under a symbiotic exception
+to BrainChip Inc. and any NPU vendor willing to engage on reciprocal terms — you
+contribute hardware documentation, silicon access, or engineering support; the
+exception removes AGPL friction on the original code. Code with ecoPrimals lineage
+is **not** exception-eligible — it inherits from the commons and stays there. See
+[SCYBORG_EXCEPTION_PROTOCOL.md](https://github.com/ecoPrimals/whitePaper) for
+the full framework.
 
 ---
 
-Part of [ecoPrimals](https://github.com/ecoPrimals) — sovereign compute for science and human dignity.
-Website: [primals.eco](https://primals.eco)
+## The wider ecosystem
+
+If you find rustChip useful, there is substantially more.
+
+The ecoPrimals project is a 3.2M LOC sovereign compute stack — zero C dependencies,
+107K+ tests — covering GPU compilation, math libraries, neuromorphic hardware,
+networking, storage, and cryptography. Eight science-validation springs exercise
+the stack across physics, agriculture, biology, and health.
+
+**Start here:**
+
+- [primals.eco](https://primals.eco) — the public verification site (built by [sporePrint](https://github.com/ecoPrimals/sporePrint))
+- [wateringHole](https://github.com/ecoPrimals/wateringHole) — ecosystem documentation, taxonomy, glossary, and standards
+- [toadStool](https://github.com/ecoPrimals/toadStool) — sovereign compute hardware (the primal rustChip descends from)
+- [coralReef](https://github.com/ecoPrimals/coralReef) — sovereign GPU compiler (VFIO patterns that rustChip mirrors)
+- [barraCuda](https://github.com/ecoPrimals/barraCuda) — sovereign math engine (where NPU output goes next)
+
+**Science that exercises this hardware:**
+
+- [hotSpring](https://github.com/syntheticChemistry/hotSpring) — lattice QCD, the original Akida deployment (5,978 live calls)
+- [airSpring](https://github.com/syntheticChemistry/airSpring) — agricultural ESN streaming on NPU
+- [wetSpring](https://github.com/syntheticChemistry/wetSpring) — sentinel microbe inference
+
+All scyBorg-licensed. All public. All sovereign.

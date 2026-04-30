@@ -130,18 +130,29 @@ fn parse_model_name(name: &str) -> akida_models::Result<ZooModel> {
     let name_lower = name.to_lowercase();
     let name_clean = name_lower.trim_end_matches(".fbz").replace('-', "_");
 
-    match name_clean.as_str() {
-        "akidanet_05_160" | "akidanet05" | "akidanet_05" => Ok(ZooModel::AkidaNet05_160),
-        "akidanet_10_224" | "akidanet10" | "akidanet_10" | "akidanet" => {
-            Ok(ZooModel::AkidaNet10_224)
+    // Try matching by filename (with or without .fbz extension)
+    let fbz_name = if name_clean.ends_with(".fbz") {
+        name_clean.clone()
+    } else {
+        format!("{name_clean}.fbz")
+    };
+
+    for model in ZooModel::all() {
+        if model.filename() == fbz_name {
+            return Ok(*model);
         }
+    }
+
+    // Short aliases
+    match name_clean.as_str() {
+        "akidanet" | "akidanet_imagenet" => Ok(ZooModel::AkidaNetImagenet),
+        "akidanet18" => Ok(ZooModel::AkidaNet18Imagenet),
         "ds_cnn_kws" | "dscnn" | "kws" => Ok(ZooModel::DsCnnKws),
-        "mobilenetv2" | "mobilenet" => Ok(ZooModel::MobileNetV2),
-        "vit_tiny" | "vit" => Ok(ZooModel::ViTTiny),
-        "yolov8n" | "yolo" => Ok(ZooModel::YoloV8n),
-        "pointnet_plus" | "pointnet" | "pointnet++" => Ok(ZooModel::PointNetPlusPlus),
-        "dvs_gesture" | "dvsgesture" | "gesture" => Ok(ZooModel::DvsGesture),
-        "event_camera" | "eventcamera" => Ok(ZooModel::EventCamera),
+        "mobilenet" | "mobilenet_imagenet" => Ok(ZooModel::MobileNetImagenet),
+        "yolo" | "yolo_voc" => Ok(ZooModel::YoloVoc),
+        "pointnet" | "pointnet++" => Ok(ZooModel::PointNetPlusModelnet40),
+        "gesture" | "convtiny_gesture" => Ok(ZooModel::ConvtinyGesture),
+        "mnist" | "gxnor" => Ok(ZooModel::GxnorMnist),
         "esn_chaotic" | "esn" | "chaotic" => Ok(ZooModel::EsnChaotic),
         _ => Err(akida_models::AkidaModelError::loading_failed(format!(
             "Unknown model: {name}. Use --list to see available models."

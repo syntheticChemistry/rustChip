@@ -84,13 +84,16 @@ The FlatBuffer layout was reverse-engineered from:
 3. `crates/akida-chip/src/program.rs` — the confirmed Rust model
 
 Key findings:
-- `.fbz` files are Snappy-compressed; the first bytes are a varint (no fixed magic)
-- After decompression: standard FlatBuffer — bytes [0..4] are root table offset (u32 LE)
-- Version string at variable offset in decompressed data (observed: 33-35 across models)
+- `.fbz` = `[varint][snappy_chunks][zero_padding]` — Snappy-compressed FlatBuffer with trailing zeros
+- Varint encodes uncompressed FlatBuffer size (LEB128/Snappy format, 1–5 bytes)
+- BrainChip SDK pads with zero bytes after the Snappy stream (alignment artifact)
+- Trailing zeros are valid Snappy literal chunks — must probe for exact stream boundary
+- After decompression: standard FlatBuffer — bytes [0..4] are root table offset (u32 LE, typically 0x10)
+- Version string via vtable traversal (observed at offsets 30–35 in decompressed data)
 - Layer table at variable offset (table pointer at offset 4)
 - Weight layout: int4 packed 2-per-byte, row-major order
 - Threshold encoding: int4, same packing as weights
-- Note: hand-built test models from `ProgramBuilder` may use raw FlatBuffer (no Snappy)
+- Validated against full model zoo: ds_cnn_kws (41 KB), vgg_utk_face (149 KB), and 13 more
 
 ---
 

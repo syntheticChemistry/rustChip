@@ -58,6 +58,17 @@ fn test_both_backends_identical_capabilities() {
 }
 
 #[test]
+#[ignore] // Requires hardware + vfio-pci binding
+fn test_vfio_backend() {
+    let bdf = std::env::var("AKIDA_BDF").unwrap_or_else(|_| "0000:e2:00.0".into());
+    let backend = select_backend(BackendSelection::Vfio, &bdf).expect("VFIO backend init");
+    println!("VFIO backend: {:?}", backend.backend_type());
+    println!("  NPUs: {}", backend.capabilities().npu_count);
+    println!("  Memory: {} MB", backend.capabilities().memory_mb);
+    println!("  Ready: {}", backend.is_ready());
+}
+
+#[test]
 #[ignore] // Requires hardware
 fn test_power_measurement() {
     // Test kernel backend power query

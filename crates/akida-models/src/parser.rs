@@ -2,12 +2,21 @@
 
 //! Binary parser for Akida `.fbz` files.
 //!
-//! `.fbz` files are **Snappy-compressed FlatBuffers**. The first bytes encode
-//! the uncompressed payload size as a Snappy varint; the remainder is
-//! Snappy-compressed data that decompresses to a standard FlatBuffer binary.
+//! `.fbz` files are **Snappy-compressed FlatBuffers with zero-padding**:
 //!
-//! The parser also accepts raw (uncompressed) FlatBuffer data for hand-built
-//! test models produced by `ProgramBuilder`.
+//! ```text
+//! [varint: uncompressed_size] [snappy_chunks] [zero_padding]
+//! ```
+//!
+//! The leading varint encodes the uncompressed FlatBuffer size (standard
+//! Snappy raw format). After the compressed chunks, BrainChip appends zero
+//! bytes to pad the file to an alignment boundary. These zeros happen to be
+//! valid Snappy literal chunks, so a naive `snap::raw::Decoder::decompress_vec`
+//! over the whole file will overflow the output buffer. The parser handles
+//! this by probing for the exact Snappy stream boundary.
+//!
+//! The decompressed payload is a standard FlatBuffer binary with a root table
+//! offset at `[0..4]` (u32 LE).
 
 use crate::error::{AkidaModelError, Result};
 
@@ -31,27 +40,86 @@ pub struct ModelHeader {
 /// the data as-is.
 ///
 /// Returns `(payload, was_compressed)`.
+///
+/// BrainChip's `.fbz` format is `[varint:uncompressed_size][snappy_chunks][zero_padding]`.
+/// The trailing zero-padding causes `snap::raw::Decoder::decompress_vec` to fail
+/// because zeros decode as valid 1-byte Snappy literal chunks that overflow the
+/// output buffer. We handle this by trying direct decompression first, then
+/// falling back to a binary-search approach that finds the exact compressed
+/// stream boundary.
 pub fn decompress_fbz(data: &[u8]) -> Result<(Vec<u8>, bool)> {
     if data.is_empty() {
         return Err(AkidaModelError::parse_error("Empty file"));
     }
 
-    // Try Snappy block decompression. Real `.fbz` files start with a
-    // Snappy varint encoding the uncompressed size.
-    match snap::raw::Decoder::new().decompress_vec(data) {
-        Ok(decompressed) => {
-            tracing::debug!(
-                "Snappy decompression: {} -> {} bytes",
-                data.len(),
-                decompressed.len()
-            );
-            Ok((decompressed, true))
-        }
-        Err(_) => {
-            tracing::debug!("Not Snappy-compressed, treating as raw FlatBuffer data");
-            Ok((data.to_vec(), false))
+    // Fast path: works for test data and .fbz files without padding.
+    if let Ok(decompressed) = snap::raw::Decoder::new().decompress_vec(data) {
+        tracing::debug!(
+            "Snappy decompression: {} -> {} bytes",
+            data.len(),
+            decompressed.len()
+        );
+        return Ok((decompressed, true));
+    }
+
+    // Slow path for BrainChip .fbz with zero-padding after the Snappy stream.
+    // Read the varint to get the declared uncompressed size, then find the
+    // exact end of the Snappy data by binary-searching the input length.
+    if let Some((uncompressed_len, varint_bytes)) = read_varint(data) {
+        if uncompressed_len > 0 && uncompressed_len <= 256 * 1024 * 1024 {
+            if let Some(decompressed) = decompress_padded_snappy(data, varint_bytes) {
+                tracing::debug!(
+                    "Snappy decompression (zero-padded .fbz): {} -> {} bytes",
+                    data.len(),
+                    decompressed.len(),
+                );
+                return Ok((decompressed, true));
+            }
         }
     }
+
+    tracing::debug!("Not Snappy-compressed, treating as raw FlatBuffer data");
+    Ok((data.to_vec(), false))
+}
+
+/// Find the exact Snappy stream boundary within zero-padded data and
+/// decompress. The Snappy stream may contain legitimate trailing zero
+/// bytes, so we probe forward from the last non-zero byte position.
+fn decompress_padded_snappy(data: &[u8], varint_bytes: usize) -> Option<Vec<u8>> {
+    let payload = &data[varint_bytes..];
+
+    let last_nonzero = payload.iter().rposition(|&b| b != 0)?;
+
+    // The Snappy stream ends at or just past the last non-zero byte.
+    // A zero byte in Snappy is a 1-byte literal that consumes the next
+    // byte, so the stream can extend at most a few bytes past the last
+    // non-zero. Probe up to 8 positions.
+    for end in last_nonzero + 1..=(last_nonzero + 8).min(payload.len()) {
+        let mut buf = Vec::with_capacity(varint_bytes + end);
+        buf.extend_from_slice(&data[..varint_bytes]);
+        buf.extend_from_slice(&payload[..end]);
+
+        if let Ok(decompressed) = snap::raw::Decoder::new().decompress_vec(&buf) {
+            return Some(decompressed);
+        }
+    }
+
+    None
+}
+
+/// Decode a Snappy/LEB128 varint from the start of `data`.
+/// Returns `(value, bytes_consumed)` or `None` if the varint is malformed.
+fn read_varint(data: &[u8]) -> Option<(usize, usize)> {
+    let mut result: u64 = 0;
+    let mut shift = 0;
+    for (i, &byte) in data.iter().take(10).enumerate() {
+        result |= ((byte & 0x7f) as u64) << shift;
+        shift += 7;
+        if byte & 0x80 == 0 {
+            return Some((result as usize, i + 1));
+        }
+    }
+    None
 }
 
 /// Parse model header from `.fbz` file data.

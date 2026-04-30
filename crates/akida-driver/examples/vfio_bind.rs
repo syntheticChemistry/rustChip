@@ -37,8 +37,8 @@
 //!
 //! See: docs/HARDWARE.md § VFIO Setup
 
-const AKIDA_VENDOR_ID: u16 = 0x1e7f;
-const AKIDA_DEVICE_ID: u16 = 0x1000;
+const AKIDA_VENDOR_ID: u16 = 0x1e7c;
+const AKIDA_DEVICE_ID: u16 = 0xbca1;
 const VFIO_PCI_DRIVER: &str = "vfio-pci";
 const KERNEL_DRIVER: &str = "pcie_dw_edma";
 
