@@ -10,7 +10,7 @@
 //! doesn't care about numerical correctness — e.g., testing model loading
 //! pipelines, backend selection logic, or multi-tenancy slot management.
 //!
-//! Ported from toadStool's `SyntheticNpuBackend`.
+//! Lineage: ported from toadStool's `SyntheticNpuBackend` (ecoPrimals ecosystem).
 
 use crate::backend::{BackendType, ModelHandle, NpuBackend};
 use crate::capabilities::{
@@ -27,7 +27,7 @@ pub struct SyntheticNpuBackend {
 }
 
 impl SyntheticNpuBackend {
-    /// AKD1000-like capability profile matching toadStool's coverage mock.
+    /// AKD1000-like capability profile for CI and integration tests.
     #[must_use]
     pub fn coverage_default() -> Self {
         let caps = Capabilities {

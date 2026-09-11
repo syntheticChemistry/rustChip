@@ -18,20 +18,20 @@
 //!
 //! # The Solution
 //!
-//! `HybridEsn` accepts weights trained under tanh dynamics (hotSpring's standard
-//! output) and executes them correctly regardless of which substrate is available:
+//! `HybridEsn` accepts weights trained under tanh dynamics and executes them
+//! correctly regardless of which substrate is available:
 //!
 //! - **Software mode** (available today): `SoftwareBackend` with native tanh.
-//!   Accuracy: hotSpring's validated 89.7% on QCD thermalization.
+//!   Validated 89.7% accuracy on lattice QCD thermalization detection.
 //!   Throughput: ~800 Hz. Used when no NPU is present.
 //!
 //! - **Hardware-linear mode** (pending `metalForge/experiments/004_HYBRID_TANH`):
 //!   AKD1000 computes the matrix multiply (int4, parallel, 54 µs).
 //!   Host applies tanh to the 128-float result (< 1 µs).
 //!   Accuracy: same 89.7% (tanh preserved). Throughput: 18,500 Hz.
-//!   Activated by calling `with_hardware_device()`.
+//!   Activated by calling `with_hardware_linear()`.
 //!
-//! # hotSpring Integration
+//! # Basic Usage
 //!
 //! ```no_run
 //! use akida_driver::{HybridEsn, EsnSubstrate};
@@ -39,21 +39,20 @@
 //! # let w_in  = vec![0.1f32; 128 * 6];
 //! # let w_res = vec![0.05f32; 128 * 128];
 //! # let w_out = vec![0.2f32; 3 * 128];
-//! # let plaquette_features = vec![0.0f32; 6];
-//! // hotSpring exports its existing tanh-trained weights — no retraining
+//! # let features = vec![0.0f32; 6];
+//! // Load tanh-trained weights — no retraining needed
 //! let mut esn = HybridEsn::from_weights(
-//!     &w_in,          // hotSpring's existing f32 w_in  (reservoir_size × input_dim)
-//!     &w_res,         // hotSpring's existing f32 w_res (reservoir_size × reservoir_size)
-//!     &w_out,         // hotSpring's existing f32 w_out (output_dim × reservoir_size)
-//!     0.3,            // leak rate (hotSpring's α)
+//!     &w_in,          // f32 w_in  (reservoir_size × input_dim)
+//!     &w_res,         // f32 w_res (reservoir_size × reservoir_size)
+//!     &w_out,         // f32 w_out (output_dim × reservoir_size)
+//!     0.3,            // leak rate α
 //! )?;
 //!
-//! // Identical API to hotSpring's software ESN — drop-in replacement
-//! let prediction = esn.step(&plaquette_features)?;
+//! let prediction = esn.step(&features)?;
 //! # Ok::<(), akida_driver::AkidaError>(())
 //! ```
 //!
-//! When hardware is available and validated, swap to hardware speed with one call:
+//! When hardware is available, swap to hardware speed with one call:
 //! ```no_run
 //! # use akida_driver::{HybridEsn, DeviceManager};
 //! # let (w_in, w_res, w_out) = (vec![0.1f32; 128*4], vec![0.05f32; 128*128], vec![0.2f32; 128]);
@@ -64,7 +63,7 @@
 //! # Ok::<(), akida_driver::AkidaError>(())
 //! ```
 //!
-//! # toadStool Integration
+//! # Automatic Dispatch
 //!
 //! ```no_run
 //! use akida_driver::{SubstrateSelector, SubstrateInfo};
@@ -73,11 +72,11 @@
 //! # let w_res = vec![0.05f32; 128 * 128];
 //! # let w_out = vec![0.2f32; 3 * 128];
 //! # let features = vec![0.0f32; 6];
-//! // toadStool builds a selector — dispatches to best available substrate
+//! // Selector auto-discovers hardware and picks the best substrate
 //! let mut selector = SubstrateSelector::for_weights(&w_in, &w_res, &w_out, 0.3)?;
 //! println!("Active substrate: {:?}", selector.active_substrate().mode);
 //!
-//! // Single dispatch call works on any substrate
+//! // Single dispatch call — works on any substrate
 //! let result = selector.esn_step(&features)?;
 //! # Ok::<(), akida_driver::AkidaError>(())
 //! ```
@@ -97,7 +96,7 @@ use software::SoftwareEsnExecutor;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubstrateMode {
     /// Pure CPU f32 with tanh activation (`SoftwareBackend`).
-    /// Available today. Accuracy: hotSpring's validated software performance.
+    /// Available today. Validated 89.7% on lattice QCD thermalization.
     PureSoftware,
 
     /// AKD1000 hardware linear transform + host tanh activation.
@@ -112,7 +111,7 @@ pub enum SubstrateMode {
 }
 
 impl SubstrateMode {
-    /// Human-readable description for logging and toadStool telemetry.
+    /// Human-readable description for logging and telemetry.
     #[must_use]
     pub const fn description(&self) -> &'static str {
         match self {
@@ -129,12 +128,12 @@ impl SubstrateMode {
     }
 }
 
-// ── ESN substrate trait — what hotSpring and toadStool program against ────────
+// ── ESN substrate trait ──────────────────────────────────────────────────────
 
 /// Unified interface for ESN inference across all substrates.
 ///
-/// hotSpring implements its simulation runner against this trait.
-/// toadStool's substrate dispatch uses this trait for NPU-aware scheduling.
+/// Implement this trait to integrate rustChip into any simulation runner
+/// or heterogeneous dispatch system.
 ///
 /// All implementors must preserve the temporal state between calls — a `step()`
 /// call advances the reservoir state, and the next call sees the updated state.
@@ -193,7 +192,7 @@ pub trait EsnSubstrate: Send + Sync {
 
     /// Estimated throughput in inferences/second.
     ///
-    /// Used by toadStool's scheduler to select the fastest available substrate.
+    /// Estimated throughput — useful for scheduler or dispatch selection.
     fn estimated_hz(&self) -> f64 {
         match self.substrate_mode() {
             SubstrateMode::PureSoftware => 800.0,
@@ -210,9 +209,9 @@ pub trait EsnSubstrate: Send + Sync {
     }
 }
 
-// ── Weight container — what hotSpring produces ────────────────────────────────
+// ── Weight container ─────────────────────────────────────────────────────────
 
-/// ESN weight matrices exported from hotSpring (or any training framework).
+/// ESN weight matrices from any training framework (NumPy, PyTorch, etc.).
 ///
 /// All weights are in tanh-training format (f32, row-major).
 /// No quantization, no bounded-ReLU re-optimization required.
@@ -330,12 +329,11 @@ impl EsnWeights {
 
 /// Substrate-agnostic ESN executor.
 ///
-/// Accepts tanh-trained weights from hotSpring and dispatches to:
+/// Accepts tanh-trained weights and dispatches to:
 /// - CPU f32 + tanh today (`SoftwareBackend`, correct results)
 /// - AKD1000 + host tanh when hardware mode is validated (Exp 004)
 ///
 /// The substrate can be changed at runtime without re-loading weights.
-/// hotSpring and toadStool program against this type (or `EsnSubstrate`).
 pub struct HybridEsn {
     weights: EsnWeights,
     mode: SubstrateMode,
@@ -359,7 +357,7 @@ impl std::fmt::Debug for HybridEsn {
 }
 
 impl HybridEsn {
-    /// Create from raw weight slices (hotSpring's primary path).
+    /// Create from raw weight slices.
     ///
     /// Uses `PureSoftware` mode by default. Call `with_hardware_device()` to
     /// upgrade to hardware once `metalForge/experiments/004_HYBRID_TANH` is validated.
@@ -468,7 +466,7 @@ impl HybridEsn {
     /// (i.e., trained via `MetaTF`, not hotSpring's software ESN path).
     /// Accuracy: 86.1% on QCD (3.6% below tanh). Throughput: 18,500 Hz.
     ///
-    /// For hotSpring weights: prefer `with_hardware_linear()` instead.
+    /// For tanh-trained weights: prefer `with_hardware_linear()` instead.
     ///
     /// # Errors
     ///
@@ -554,9 +552,9 @@ impl EsnSubstrate for HybridEsn {
     }
 }
 
-// ── SubstrateSelector — toadStool's dispatch point ───────────────────────────
+// ── SubstrateSelector — runtime dispatch ─────────────────────────────────────
 
-/// Substrate information returned to toadStool's scheduler.
+/// Substrate information for scheduler/dispatch decisions.
 #[derive(Debug, Clone)]
 pub struct SubstrateInfo {
     /// Which mode is active.
@@ -571,10 +569,10 @@ pub struct SubstrateInfo {
     pub npu_nps: usize,
 }
 
-/// Runtime substrate selector for toadStool's NPU dispatch system.
+/// Runtime substrate selector for NPU dispatch.
 ///
 /// Discovers available substrates at construction time and selects the
-/// optimal one (hardware if present, software if not). toadStool calls
+/// optimal one (hardware if present, software if not). Callers use
 /// `esn_step()` without knowing which substrate is executing.
 ///
 /// ```no_run
@@ -622,7 +620,7 @@ impl SubstrateSelector {
         Self { esn }
     }
 
-    /// Active substrate information for toadStool's scheduler/telemetry.
+    /// Active substrate information for scheduler/telemetry.
     #[must_use]
     pub fn active_substrate(&self) -> SubstrateInfo {
         let mode = self.esn.mode().clone();

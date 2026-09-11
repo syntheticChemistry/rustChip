@@ -45,7 +45,7 @@ pub enum ModelSource {
     BrainChipMetaTf,
     /// `NeuroBench` benchmark suite
     NeuroBench,
-    /// ecoPrimals physics models (validated on live AKD1000)
+    /// Physics models (validated on live AKD1000 in lattice QCD production)
     EcoPrimalsPhysics,
     /// Hand-built via `program_external()`
     HandBuilt,

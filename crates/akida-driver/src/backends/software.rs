@@ -77,10 +77,10 @@ impl SoftwareBackend {
     /// Create a software backend with explicit architecture.
     ///
     /// `reservoir_size` corresponds to the number of NPs in the Akida model.
-    /// Common sizes from ecoPrimals models:
-    /// - 64 NPs (Anderson regime, phase classifier)
-    /// - 128 NPs (ESN QCD thermalization, transport predictor)
-    /// - 256 NPs (ESN MSLP chaotic)
+    /// Common reservoir sizes:
+    /// - 64 NPs (small classifiers)
+    /// - 128 NPs (ESN thermalization, transport prediction)
+    /// - 256 NPs (chaotic time-series)
     pub fn new(reservoir_size: usize, input_size: usize, output_size: usize) -> Self {
         let caps = Capabilities {
             chip_version: ChipVersion::Akd1000,
@@ -114,14 +114,12 @@ impl SoftwareBackend {
         }
     }
 
-    /// Create with the default hotSpring ESN architecture (50 NPs, 8-dim input).
-    ///
-    /// Matches `hotSpring::barracuda::md::reservoir::EsnConfig::default()`.
+    /// Create with the default ESN architecture (50 NPs, 8-dim input, 1-dim output).
     pub fn default_hotspring() -> Self {
         Self::new(50, 8, 1)
     }
 
-    /// Set the leak rate (default 0.3, matches hotSpring default; ecosystem context — not a runtime dependency).
+    /// Set the leak rate (default 0.3).
     #[must_use]
     pub const fn with_leak_rate(mut self, alpha: f32) -> Self {
         self.leak_rate = alpha;
